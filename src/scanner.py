@@ -3,12 +3,24 @@ import concurrent.futures
 from typing import Optional
 
 import pandas as pd
+import numpy as np
 import yfinance as yf
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 
 import config
 
 logger = logging.getLogger(__name__)
+
+
+def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
+    """Compute RSI using Wilder's smoothing (standard definition)."""
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
 
 
 @retry(
@@ -19,24 +31,26 @@ logger = logging.getLogger(__name__)
 )
 def fetch_ohlcv(symbol: str, days: int = config.LOOKBACK_DAYS) -> pd.DataFrame:
     """Download daily OHLCV data via yfinance. Retries up to 3x on failure."""
-    period = f"{days}d"
-    df = yf.download(symbol, period=period, interval="1d", auto_adjust=True, progress=False)
+    df = yf.download(symbol, period=f"{days}d", interval="1d", auto_adjust=True, progress=False)
     if df.empty:
         raise ValueError(f"No data returned for {symbol}")
+    # Flatten MultiIndex columns yfinance sometimes returns
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
     df.columns = [c.lower() for c in df.columns]
     return df
 
 
 def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
     """
-    Score a stock for swing trade candidacy. Returns None if it fails any hard filter.
+    Score a stock for swing trade candidacy. Returns None if any hard filter fails.
 
     Scoring weights:
-      - Volume ratio (last day / 20d avg): 25%
-      - Above 50-day MA:                  20%
-      - RSI in sweet spot (45-65):        20%
-      - Price within 3% of 20-day MA:     20%
-      - 20-day MA slope positive:         15%
+      Volume ratio (last day / 20d avg): 25 pts
+      Above 50-day MA:                  20 pts
+      RSI in sweet spot (45–65):        20 pts
+      Price within 3% of 20-day MA:     20 pts
+      20-day MA slope (5-day gradient): 15 pts
     """
     try:
         if len(df) < config.MA_TREND:
@@ -58,19 +72,9 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
         if last_volume == 0:
             return None
 
-        # ── Indicators ────────────────────────────────────────────────────────
-        # pandas-ta may return a DataFrame with a single column; flatten to Series
-        rsi_result = df.ta.rsi(length=config.RSI_PERIOD)
-        if isinstance(rsi_result, pd.DataFrame):
-            rsi_series = rsi_result.iloc[:, 0]
-        else:
-            rsi_series = rsi_result
-
-        rsi = float(rsi_series.iloc[-1]) if rsi_series is not None and not rsi_series.empty else 50.0
-        if pd.isna(rsi):
-            rsi = 50.0
-
-        if not (config.SCANNER_RSI_MIN <= rsi <= config.SCANNER_RSI_MAX):
+        rsi_series = _rsi(close, config.RSI_PERIOD)
+        rsi = float(rsi_series.iloc[-1])
+        if pd.isna(rsi) or not (config.SCANNER_RSI_MIN <= rsi <= config.SCANNER_RSI_MAX):
             return None
 
         ma20 = float(close.rolling(config.MA_SHORT).mean().iloc[-1])
@@ -79,24 +83,19 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
         # ── Soft scoring ──────────────────────────────────────────────────────
         score = 0.0
 
-        # Volume ratio (last day vs 20d avg) — rewards unusual activity
-        vol_ratio = last_volume / vol_20d_avg if vol_20d_avg > 0 else 1.0
+        vol_ratio = last_volume / vol_20d_avg
         score += min(vol_ratio / 2.0, 1.0) * 25
 
-        # Above 50-day MA — confirms uptrend
         score += 20 if last_close > ma50 else 0
 
-        # RSI sweet spot 45-65 — not extended, not weak
-        rsi_mid = 55.0
-        rsi_distance = abs(rsi - rsi_mid) / 10.0
+        rsi_distance = abs(rsi - 55.0) / 10.0
         score += max(0.0, 1.0 - rsi_distance) * 20
 
-        # Price within 3% of 20d MA — potential pullback entry
         ma20_distance = abs(last_close - ma20) / ma20
         score += max(0.0, 1.0 - (ma20_distance / 0.03)) * 20
 
-        # 20d MA slope — rewards stocks trending upward
-        ma20_5d_ago = float(close.rolling(config.MA_SHORT).mean().iloc[-5])
+        ma20_series = close.rolling(config.MA_SHORT).mean()
+        ma20_5d_ago = float(ma20_series.iloc[-5])
         ma20_slope = (ma20 - ma20_5d_ago) / ma20_5d_ago if ma20_5d_ago > 0 else 0.0
         score += min(max(ma20_slope / 0.01, 0.0), 1.0) * 15
 
@@ -118,7 +117,6 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
 
 
 def _score_symbol(symbol: str) -> Optional[dict]:
-    """Fetch + score a single symbol. Returns None on any failure."""
     try:
         df = fetch_ohlcv(symbol)
         return compute_score(symbol, df)
@@ -128,10 +126,7 @@ def _score_symbol(symbol: str) -> Optional[dict]:
 
 
 def scan_watchlist(watchlist: list[str]) -> list[dict]:
-    """
-    Score all watchlist symbols in parallel, return top SCANNER_TOP_N by score.
-    Uses ThreadPoolExecutor because yfinance is I/O-bound.
-    """
+    """Score all watchlist symbols in parallel, return top SCANNER_TOP_N by score."""
     results = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
