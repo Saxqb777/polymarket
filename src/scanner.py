@@ -1,5 +1,6 @@
 import logging
 import concurrent.futures
+import time
 from typing import Optional
 
 import pandas as pd
@@ -31,6 +32,7 @@ def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
 )
 def fetch_ohlcv(symbol: str, days: int = config.LOOKBACK_DAYS) -> pd.DataFrame:
     """Download daily OHLCV data via yfinance. Retries up to 3x on failure."""
+    time.sleep(0.5)
     df = yf.download(symbol, period=f"{days}d", interval="1d", auto_adjust=True, progress=False)
     if df.empty:
         raise ValueError(f"No data returned for {symbol}")
@@ -129,7 +131,7 @@ def scan_watchlist(watchlist: list[str]) -> list[dict]:
     """Score all watchlist symbols in parallel, return top SCANNER_TOP_N by score."""
     results = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         futures = {pool.submit(_score_symbol, sym): sym for sym in watchlist}
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
