@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.Python
+
+# Secrets
+.env
+
+# Data / DB
+data/*.db
+data/*.csv
+logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Railway
+.railway/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
