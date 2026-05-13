@@ -12,9 +12,6 @@ finnhub-python>=2.4.20
 # News
 requests>=2.32.0
 
-# Telegram
-python-telegram-bot>=21.0.0
-
 # Utilities
 pytz>=2024.1
 tenacity>=8.3.0
