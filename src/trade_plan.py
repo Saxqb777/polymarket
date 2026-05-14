@@ -18,22 +18,20 @@ def calculate_position_size(
     max_position_pct: float = config.MAX_POSITION_SIZE_PCT,
 ) -> dict:
     """
-    Calculate exact share count using two constraints — take the tighter one:
+    Calculate exact integer share count using two constraints — tighter wins:
       1. Risk rule:     shares = floor(risk_amount / risk_per_share)
       2. Position cap:  shares = floor(capital * max_position_pct / entry)
 
-    Returns a dict with all sizing figures downstream modules need.
     Raises ValueError if entry == stop (zero risk) or shares < 1.
+    Used for DB logging. For display use suggest_position() instead.
     """
     risk_per_share = abs(entry - stop)
     if risk_per_share == 0:
         raise ValueError("entry and stop_loss are identical — cannot size position")
 
     risk_amount = capital * risk_pct
-
     shares_by_risk = math.floor(risk_amount / risk_per_share)
     shares_by_cap = math.floor((capital * max_position_pct) / entry)
-
     shares = min(shares_by_risk, shares_by_cap)
 
     if shares < 1:
@@ -45,18 +43,11 @@ def calculate_position_size(
         )
 
     position_value = shares * entry
-    position_pct = (position_value / capital) * 100
-    actual_risk = shares * risk_per_share
-    potential_gain = shares * abs(entry - stop) * (abs(entry - stop) and
-                     abs(config.MIN_RISK_REWARD))  # floor estimate; analyst sets real target
-    # Use analyst's actual target for potential gain — caller passes it separately
-    # This field is populated by format_telegram_message
-
     return {
         "shares": shares,
         "position_value": round(position_value, 2),
-        "position_pct": round(position_pct, 1),
-        "risk_amount": round(actual_risk, 2),
+        "position_pct": round((position_value / capital) * 100, 1),
+        "risk_amount": round(shares * risk_per_share, 2),
         "risk_per_share": round(risk_per_share, 2),
         "shares_by_risk": shares_by_risk,
         "shares_by_cap": shares_by_cap,
@@ -64,9 +55,40 @@ def calculate_position_size(
     }
 
 
+def suggest_position(
+    entry: float,
+    stop: float,
+    capital: float = config.ACCOUNT_CAPITAL,
+    risk_pct: float = config.RISK_PER_TRADE_PCT,
+    max_position_pct: float = config.MAX_POSITION_SIZE_PCT,
+) -> dict:
+    """
+    Compute a position suggestion for display — uses fractional shares, never raises.
+    Takes the tighter of the 1% risk rule and the 5% position cap.
+    """
+    risk_per_share = abs(entry - stop)
+    risk_amount = round(capital * risk_pct, 2)
+    max_position = round(capital * max_position_pct, 2)
+
+    if risk_per_share > 0:
+        shares_by_risk = risk_amount / risk_per_share
+        shares_by_cap = max_position / entry if entry > 0 else 0
+        suggested_shares = min(shares_by_risk, shares_by_cap)
+    else:
+        suggested_shares = 0.0
+
+    suggested_value = round(suggested_shares * entry, 2)
+
+    return {
+        "suggested_shares": round(suggested_shares, 4),
+        "suggested_value": suggested_value,
+        "risk_amount": risk_amount,
+        "max_position": max_position,
+    }
+
+
 # ── Telegram MarkdownV2 escaping ──────────────────────────────────────────────
 
-# All characters that must be backslash-escaped in Telegram MarkdownV2
 _MD2_SPECIAL = r'\_*[]()~`>#+-=|{}.!'
 
 
@@ -82,14 +104,12 @@ def _esc(text: str) -> str:
 
 
 def _fmt_price(value: Optional[float]) -> str:
-    """Format a price as an escaped MarkdownV2 string."""
     if value is None:
         return "N/A"
     return _esc(f"{value:.2f}")
 
 
 def _fmt_signed(value: float) -> str:
-    """Format a signed dollar change (+$X.XX or -$X.XX), escaped."""
     sign = "+" if value >= 0 else ""
     return _esc(f"{sign}${value:.2f}")
 
@@ -98,13 +118,12 @@ def _fmt_signed(value: float) -> str:
 
 def format_telegram_message(
     analyst_result: dict,
-    position: Optional[dict],
-    is_paper: bool = True,
+    is_paper: bool = config.PAPER_TRADING,
     capital: float = config.ACCOUNT_CAPITAL,
 ) -> str:
     """
     Build the full Telegram MarkdownV2 message for a TRADE or NO_TRADE result.
-    All dynamic content is escaped; structural formatting uses raw MarkdownV2.
+    Position sizing is shown as a recommendation only — user sets actual size.
     """
     now = datetime.now(config.GULF_TZ)
     date_str = _esc(now.strftime("%A, %b %-d"))
@@ -113,16 +132,10 @@ def format_telegram_message(
     if analyst_result.get("decision") == "NO_TRADE":
         return _format_no_trade(analyst_result, date_str, mode_str)
 
-    return _format_trade(analyst_result, position, date_str, mode_str, capital)
+    return _format_trade(analyst_result, date_str, mode_str, capital)
 
 
-def _format_trade(
-    r: dict,
-    position: dict,
-    date_str: str,
-    mode_str: str,
-    capital: float,
-) -> str:
+def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
     sym = _esc(r["symbol"])
     action = r.get("action", "BUY").upper()
     action_emoji = "📈" if action == "BUY" else "📉"
@@ -139,25 +152,14 @@ def _format_trade(
     stop_diff = stop - entry
     target_diff = target - entry
 
-    shares = position["shares"]
-    pos_value = position["position_value"]
-    pos_pct = position["position_pct"]
-    risk_amt = position["risk_amount"]
-    potential_gain = shares * (target - entry)
-    binding = position["binding_rule"]
+    suggestion = suggest_position(entry, stop, capital)
+    sug_shares = _esc(f"{suggestion['suggested_shares']:.4f}")
+    sug_value = _esc(f"{suggestion['suggested_value']:.2f}")
+    sug_risk = _esc(f"{suggestion['risk_amount']:.2f}")
 
     risks = r.get("key_risks") or []
     risk_lines = "\n".join(f"• {_esc(rk)}" for rk in risks) if risks else _esc("None identified")
-
     conf_emoji = {"HIGH": "🔥", "MEDIUM": "🟡", "LOW": "🟠"}.get(r.get("confidence", ""), "🟡")
-
-    # Note if position cap was the binding constraint
-    cap_note = ""
-    if binding == "position_cap":
-        cap_note = (
-            f"\n_\\(Position cap applied \\— "
-            f"increase ACCOUNT\\_CAPITAL for larger size\\)_"
-        )
 
     return (
         f"🎯 *WEEKLY TRADE PICK*\n"
@@ -171,12 +173,10 @@ def _format_trade(
         f"🎯 Target        \\${_fmt_price(target)}  \\({_fmt_signed(target_diff)}\\)\n"
         f"⚖️  R:R           1:{_esc(str(rr))}\n"
         f"\n"
-        f"📊 *Position* \\(${_esc(f'{capital:,.0f}')} capital\\)\n"
-        f"  Shares        {_esc(str(shares))}\n"
-        f"  Value         \\${_esc(f'{pos_value:,.2f}')}  \\({_esc(str(pos_pct))}%\\)\n"
-        f"  Max risk      \\${_esc(f'{risk_amt:,.2f}')}\n"
-        f"  Potential     {_fmt_signed(potential_gain)}"
-        f"{cap_note}\n"
+        f"💰 *Suggested size* \\(1% risk rule\\)\n"
+        f"  ~{sug_shares} shares \\(~\\${sug_value}\\)\n"
+        f"  Max risk: ~\\${sug_risk}\n"
+        f"📌 _You set the actual size — stop and target are non\\-negotiable\\._\n"
         f"\n"
         f"⏱ Timeframe     {timeframe}\n"
         f"{conf_emoji} Confidence    {confidence}\n"
