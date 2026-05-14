@@ -24,18 +24,19 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 - You always anchor stop-losses to a technical level (below support, below a key MA), never arbitrary round numbers
 
 ## Hard risk rules (non-negotiable — built into the system)
-1. ONE trade per week maximum. You must pick exactly one stock, or say NO_TRADE.
-2. Minimum risk/reward ratio of 1:2.0. Target at least 2.0 — the system hard-rejects anything below 1.8, so aim for 2.0+ to give yourself a safety buffer. If the math does not work, say NO_TRADE.
+1. ONE trade per week maximum. You must pick exactly one stock. Only use NO_TRADE if every single candidate has a structurally broken setup (e.g. stop above entry, non-numeric prices, missing critical data).
+2. Always pick your BEST candidate and set meets_quality_bar based on whether R:R >= 1.8. Do NOT refuse to trade just because R:R is below 1.8 — output the trade with meets_quality_bar: false.
 3. Stop-loss is mandatory. Every trade must have a specific stop-loss price.
 4. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
 5. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
-6. If no stock meets criteria, output NO_TRADE with a clear reason. "No trade" is a valid and respected outcome.
+6. Only output NO_TRADE if literally no candidate has a valid entry, stop, and target price. "No trade" is a last resort, not a quality filter.
 
 ## How to set entry, stop, and target
 - Entry price: the ideal limit order price for Monday morning. Use the nearest support level, MA, or breakout level as your anchor. Be specific — a single price, not a range.
 - Stop-loss: just below the nearest technical support or key MA. Must be below entry for a BUY. Give yourself a small buffer (0.5–1%) below the level so normal intraday noise doesn't stop you out.
-- Target: the next meaningful resistance level, measured move, or Fibonacci extension. Must be above entry for a BUY. Must produce R:R >= 1.8.
-- Recalculate R:R yourself: (target - entry) / (entry - stop). Report this number. Aim for 2.0 or above. The system hard-rejects below 1.8, so anything between 1.8 and 2.0 risks rejection due to rounding — target 2.0+ to be safe.
+- Target: the next meaningful resistance level, measured move, or Fibonacci extension. Must be above entry for a BUY.
+- Recalculate R:R yourself: (target - entry) / (entry - stop). Report this number. Aim for 2.0 or above. Set meets_quality_bar: true if R:R >= 1.8, false if below. Always output the trade regardless.
+- meets_quality_bar is YOUR honest assessment of setup quality. If the best you can find is R:R 1.4, still output it with meets_quality_bar: false. The human decides whether to trade it.
 
 ## Output format
 You must respond with ONLY a valid JSON object — no explanation, no markdown, no preamble, no text after the JSON.
@@ -49,6 +50,7 @@ For a trade recommendation:
   "stop_loss": 181.00,
   "target_price": 193.60,
   "risk_reward_ratio": 1.80,
+  "meets_quality_bar": true,
   "timeframe": "5-7 days",
   "confidence": "HIGH",
   "rationale": "Two to four sentences explaining the setup — what technical pattern triggered it, what the news catalyst is, and why this week is the right time.",
@@ -193,7 +195,9 @@ def _validate(result: dict) -> tuple[bool, str]:
     """
     Validate a TRADE response against the hard risk rules.
     Returns (is_valid, reason_if_invalid).
-    NO_TRADE responses always pass.
+    - Structurally broken trades (missing fields, bad prices, stop above entry) → hard reject (NO_TRADE).
+    - Sub-1.8 R:R → sets meets_quality_bar=False, passes through with warning in Telegram.
+    - NO_TRADE responses always pass.
     """
     if result.get("decision") == "NO_TRADE":
         return True, ""
@@ -230,14 +234,20 @@ def _validate(result: dict) -> tuple[bool, str]:
     if risk == 0:
         return False, "Risk is zero (entry == stop)"
     actual_rr = round(reward / risk, 4)
-    if actual_rr < config.MIN_RISK_REWARD:
-        return False, (
-            f"Calculated R:R {actual_rr:.4f} is below minimum {config.MIN_RISK_REWARD} "
-            f"(entry={entry}, stop={stop}, target={target})"
-        )
 
     # Write the recalculated R:R back so downstream code uses the verified number
     result["risk_reward_ratio"] = round(actual_rr, 2)
+
+    # Sub-1.8 R:R is a quality flag, not a hard rejection — trade passes through with warning
+    if actual_rr < config.MIN_RISK_REWARD:
+        result["meets_quality_bar"] = False
+        logger.warning(
+            "R:R %.4f is below minimum %.1f — flagging meets_quality_bar=False (not rejecting)",
+            actual_rr, config.MIN_RISK_REWARD,
+        )
+    else:
+        result["meets_quality_bar"] = True
+
     return True, ""
 
 
@@ -250,6 +260,7 @@ def _no_trade(reason: str) -> dict:
         "stop_loss": None,
         "target_price": None,
         "risk_reward_ratio": None,
+        "meets_quality_bar": None,
         "timeframe": None,
         "confidence": None,
         "rationale": None,
@@ -302,10 +313,11 @@ def analyze(candidates: list[dict]) -> dict:
 
     decision = result.get("decision", "NO_TRADE")
     logger.info(
-        "Analyst decision: %s | symbol=%s | R:R=%s | confidence=%s",
+        "Analyst decision: %s | symbol=%s | R:R=%s | quality_bar=%s | confidence=%s",
         decision,
         result.get("symbol"),
         result.get("risk_reward_ratio"),
+        result.get("meets_quality_bar"),
         result.get("confidence"),
     )
     return result

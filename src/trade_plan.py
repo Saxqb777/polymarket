@@ -161,9 +161,23 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
     risk_lines = "\n".join(f"• {_esc(rk)}" for rk in risks) if risks else _esc("None identified")
     conf_emoji = {"HIGH": "🔥", "MEDIUM": "🟡", "LOW": "🟠"}.get(r.get("confidence", ""), "🟡")
 
+    meets_quality_bar = r.get("meets_quality_bar", True)
+    if meets_quality_bar is False:
+        quality_block = (
+            f"\n"
+            f"⚠️ *BELOW QUALITY BAR*\n"
+            f"R:R is only 1:{_esc(str(rr))}\\.  The math is not strongly in your favor this week\\.\n"
+            f"Trading this is your call — the bot does not recommend it\\.\n"
+        )
+        header = "📋 *BEST AVAILABLE \\(BELOW BAR\\)*"
+    else:
+        quality_block = ""
+        header = "🎯 *WEEKLY TRADE PICK*"
+
     return (
-        f"🎯 *WEEKLY TRADE PICK*\n"
+        f"{header}\n"
         f"_{date_str} · {mode_str}_\n"
+        f"{quality_block}"
         f"\n"
         f"{action_emoji} *{action} \\${sym}* — {company}\n"
         f"{'━' * 22}\n"
