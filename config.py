@@ -19,31 +19,45 @@ PAPER_TRADE_WEEKS_MIN = 4
 # ── Timezone ───────────────────────────────────────────────────────────────────
 GULF_TZ = pytz.timezone("Asia/Dubai")  # UTC+4, no DST
 
-# ── Watchlist (72 tickers, approved 2026-05-13) ────────────────────────────────
+# ── Watchlist (147 tickers, expanded 2026-05-14) ──────────────────────────────
 WATCHLIST = [
-    # Technology
+    # Technology (15)
     "AAPL", "MSFT", "NVDA", "AMD", "GOOGL", "META", "AMZN", "CRM", "ADBE", "ORCL",
     "QCOM", "INTC", "MU", "AMAT", "LRCX",
-    # High-volatility growth
+    # High-volatility growth (6)
     "PLTR", "COIN", "SNOW", "UBER", "PANW", "AVGO",
-    # Healthcare
+    # Healthcare (10)
     "JNJ", "UNH", "PFE", "ABBV", "MRK", "LLY", "TMO", "DHR", "ABT", "ISRG",
-    # Financials
+    # Financials (10)
     "JPM", "BAC", "GS", "MS", "V", "MA", "AXP", "BLK", "SCHW", "C",
-    # Energy
+    # Energy (6)
     "XOM", "CVX", "COP", "SLB", "EOG", "FANG",
-    # Consumer Discretionary
+    # Consumer Discretionary (8)
     "TSLA", "HD", "MCD", "NKE", "SBUX", "TGT", "LOW", "BKNG",
-    # Consumer Staples
+    # Consumer Staples (6)
     "WMT", "PG", "KO", "PEP", "COST", "PM",
-    # Industrials
+    # Industrials (7)
     "CAT", "BA", "HON", "UPS", "RTX", "DE", "LMT",
-    # Materials / Utilities / Real Estate
+    # Materials / Utilities / Real Estate (5)
     "LIN", "APD", "NEE", "AMT", "SPG",
+    # Momentum mid/large caps (31)
+    "NOW", "ANET", "MRVL", "ON", "KLAC", "ASML", "ARM", "SMCI", "DELL", "HPQ",
+    "SHOP", "NET", "DDOG", "CRWD", "ZS", "SNPS", "CDNS", "FTNT", "TEAM", "WDAY",
+    "ABNB", "DASH", "RBLX", "U", "ROKU", "SNAP", "PINS", "SQ", "HOOD", "DKNG",
+    "AFRM",
+    # China ADRs (8)
+    "BABA", "PDD", "JD", "NIO", "LI", "XPEV", "BIDU", "BILI",
+    # Speculative / high-volatility (27)
+    "RGTI", "IONQ", "QBTS", "RKLB", "ASTS", "LUNR", "ACHR", "JOBY", "PLUG", "BBAI",
+    "SOUN", "IREN", "RIOT", "MARA", "OKLO", "SMR", "CIFR", "CLSK", "WULF", "APLD",
+    "AI", "LCID", "RIVN", "CHPT", "RUN", "ENPH", "FSLR",
+    # Active sector (8)
+    "MRNA", "VRTX", "GILD", "REGN", "OXY", "DVN", "MPC", "PSX",
 ]
 
 # ── Company name mapping (for news queries) ────────────────────────────────────
 SYMBOL_TO_COMPANY = {
+    # Technology
     "AAPL": "Apple",
     "MSFT": "Microsoft",
     "NVDA": "Nvidia",
@@ -59,12 +73,14 @@ SYMBOL_TO_COMPANY = {
     "MU": "Micron Technology",
     "AMAT": "Applied Materials",
     "LRCX": "Lam Research",
+    # High-volatility growth
     "PLTR": "Palantir",
     "COIN": "Coinbase",
     "SNOW": "Snowflake",
     "UBER": "Uber",
     "PANW": "Palo Alto Networks",
     "AVGO": "Broadcom",
+    # Healthcare
     "JNJ": "Johnson Johnson",
     "UNH": "UnitedHealth",
     "PFE": "Pfizer",
@@ -75,6 +91,7 @@ SYMBOL_TO_COMPANY = {
     "DHR": "Danaher",
     "ABT": "Abbott Laboratories",
     "ISRG": "Intuitive Surgical",
+    # Financials
     "JPM": "JPMorgan Chase",
     "BAC": "Bank of America",
     "GS": "Goldman Sachs",
@@ -85,12 +102,14 @@ SYMBOL_TO_COMPANY = {
     "BLK": "BlackRock",
     "SCHW": "Charles Schwab",
     "C": "Citigroup",
+    # Energy
     "XOM": "ExxonMobil",
     "CVX": "Chevron",
     "COP": "ConocoPhillips",
     "SLB": "Schlumberger",
     "EOG": "EOG Resources",
     "FANG": "Diamondback Energy",
+    # Consumer Discretionary
     "TSLA": "Tesla",
     "HD": "Home Depot",
     "MCD": "McDonald's",
@@ -99,12 +118,14 @@ SYMBOL_TO_COMPANY = {
     "TGT": "Target",
     "LOW": "Lowe's",
     "BKNG": "Booking Holdings",
+    # Consumer Staples
     "WMT": "Walmart",
     "PG": "Procter Gamble",
     "KO": "Coca-Cola",
     "PEP": "PepsiCo",
     "COST": "Costco",
     "PM": "Philip Morris",
+    # Industrials
     "CAT": "Caterpillar",
     "BA": "Boeing",
     "HON": "Honeywell",
@@ -112,11 +133,90 @@ SYMBOL_TO_COMPANY = {
     "RTX": "RTX Raytheon",
     "DE": "John Deere",
     "LMT": "Lockheed Martin",
+    # Materials / Utilities / Real Estate
     "LIN": "Linde",
     "APD": "Air Products",
     "NEE": "NextEra Energy",
     "AMT": "American Tower",
     "SPG": "Simon Property Group",
+    # Momentum mid/large caps
+    "NOW": "ServiceNow",
+    "ANET": "Arista Networks",
+    "MRVL": "Marvell Technology",
+    "ON": "ON Semiconductor",
+    "KLAC": "KLA Corporation",
+    "ASML": "ASML Holding",
+    "ARM": "Arm Holdings",
+    "SMCI": "Super Micro Computer",
+    "DELL": "Dell Technologies",
+    "HPQ": "HP Inc",
+    "SHOP": "Shopify",
+    "NET": "Cloudflare",
+    "DDOG": "Datadog",
+    "CRWD": "CrowdStrike",
+    "ZS": "Zscaler",
+    "SNPS": "Synopsys",
+    "CDNS": "Cadence Design Systems",
+    "FTNT": "Fortinet",
+    "TEAM": "Atlassian",
+    "WDAY": "Workday",
+    "ABNB": "Airbnb",
+    "DASH": "DoorDash",
+    "RBLX": "Roblox",
+    "U": "Unity Software",
+    "ROKU": "Roku",
+    "SNAP": "Snap",
+    "PINS": "Pinterest",
+    "SQ": "Block Inc",
+    "HOOD": "Robinhood",
+    "DKNG": "DraftKings",
+    "AFRM": "Affirm",
+    # China ADRs
+    "BABA": "Alibaba",
+    "PDD": "PDD Holdings",
+    "JD": "JD.com",
+    "NIO": "NIO Inc",
+    "LI": "Li Auto",
+    "XPEV": "XPeng",
+    "BIDU": "Baidu",
+    "BILI": "Bilibili",
+    # Speculative / high-volatility
+    "RGTI": "Rigetti Computing",
+    "IONQ": "IonQ",
+    "QBTS": "D-Wave Quantum",
+    "RKLB": "Rocket Lab",
+    "ASTS": "AST SpaceMobile",
+    "LUNR": "Intuitive Machines",
+    "ACHR": "Archer Aviation",
+    "JOBY": "Joby Aviation",
+    "PLUG": "Plug Power",
+    "BBAI": "BigBear.ai",
+    "SOUN": "SoundHound AI",
+    "IREN": "IREN Ltd",
+    "RIOT": "Riot Platforms",
+    "MARA": "Marathon Digital Holdings",
+    "OKLO": "Oklo Inc",
+    "SMR": "NuScale Power",
+    "CIFR": "Cipher Mining",
+    "CLSK": "CleanSpark",
+    "WULF": "TeraWulf",
+    "APLD": "Applied Digital",
+    "AI": "C3.ai",
+    "LCID": "Lucid Group",
+    "RIVN": "Rivian",
+    "CHPT": "ChargePoint",
+    "RUN": "Sunrun",
+    "ENPH": "Enphase Energy",
+    "FSLR": "First Solar",
+    # Active sector
+    "MRNA": "Moderna",
+    "VRTX": "Vertex Pharmaceuticals",
+    "GILD": "Gilead Sciences",
+    "REGN": "Regeneron Pharmaceuticals",
+    "OXY": "Occidental Petroleum",
+    "DVN": "Devon Energy",
+    "MPC": "Marathon Petroleum",
+    "PSX": "Phillips 66",
 }
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
