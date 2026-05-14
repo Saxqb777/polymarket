@@ -25,7 +25,7 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 
 ## Hard risk rules (non-negotiable — built into the system)
 1. ONE trade per week maximum. You must pick exactly one stock, or say NO_TRADE.
-2. Minimum risk/reward ratio of 1:1.8. If the math does not work, say NO_TRADE.
+2. Minimum risk/reward ratio of 1:2.0. Target at least 2.0 — the system hard-rejects anything below 1.8, so aim for 2.0+ to give yourself a safety buffer. If the math does not work, say NO_TRADE.
 3. Stop-loss is mandatory. Every trade must have a specific stop-loss price.
 4. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
 5. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
@@ -35,7 +35,7 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 - Entry price: the ideal limit order price for Monday morning. Use the nearest support level, MA, or breakout level as your anchor. Be specific — a single price, not a range.
 - Stop-loss: just below the nearest technical support or key MA. Must be below entry for a BUY. Give yourself a small buffer (0.5–1%) below the level so normal intraday noise doesn't stop you out.
 - Target: the next meaningful resistance level, measured move, or Fibonacci extension. Must be above entry for a BUY. Must produce R:R >= 1.8.
-- Recalculate R:R yourself: (target - entry) / (entry - stop). Report this number. If it comes out below 1.8, adjust target upward or abandon the trade.
+- Recalculate R:R yourself: (target - entry) / (entry - stop). Report this number. Aim for 2.0 or above. The system hard-rejects below 1.8, so anything between 1.8 and 2.0 risks rejection due to rounding — target 2.0+ to be safe.
 
 ## Output format
 You must respond with ONLY a valid JSON object — no explanation, no markdown, no preamble, no text after the JSON.
@@ -232,7 +232,7 @@ def _validate(result: dict) -> tuple[bool, str]:
     actual_rr = round(reward / risk, 4)
     if actual_rr < config.MIN_RISK_REWARD:
         return False, (
-            f"Calculated R:R {actual_rr:.2f} is below minimum {config.MIN_RISK_REWARD} "
+            f"Calculated R:R {actual_rr:.4f} is below minimum {config.MIN_RISK_REWARD} "
             f"(entry={entry}, stop={stop}, target={target})"
         )
 
