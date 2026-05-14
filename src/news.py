@@ -21,7 +21,7 @@ For each headline provided, output a JSON object with:
 - "headline": the original headline text (string)
 - "sentiment": one of "BULLISH", "BEARISH", or "NEUTRAL" (string)
 - "confidence": a float between 0.0 and 1.0 indicating how clear the sentiment is
-- "reason": one sentence explaining your sentiment call (string)
+- "reason": one short phrase explaining your call — NO quotes, NO commas inside the reason (string)
 
 Rules:
 - BULLISH: news that could drive the stock price up (earnings beat, new product, partnership, buyback, upgrade, strong guidance, macro tailwind)
@@ -30,11 +30,14 @@ Rules:
 - Focus only on impact to THIS specific stock, not the broader market
 - When in doubt, lean NEUTRAL rather than forcing a direction
 
-Respond with ONLY a valid JSON array — no explanation, no markdown, no preamble. Example:
-[
-  {"headline": "...", "sentiment": "BULLISH", "confidence": 0.85, "reason": "..."},
-  {"headline": "...", "sentiment": "NEUTRAL", "confidence": 0.60, "reason": "..."}
-]"""
+CRITICAL OUTPUT RULES:
+- Return ONLY a raw JSON array. No markdown, no code fences, no preamble, no explanation after.
+- Every string value must be on a single line — no newlines inside strings.
+- Keep "reason" under 10 words. Never use double-quotes inside a reason string.
+- The array must be valid JSON that json.loads() can parse directly.
+
+Example of correct output (copy this exact format):
+[{"headline":"Apple reports record sales","sentiment":"BULLISH","confidence":0.85,"reason":"Strong revenue beat"},{"headline":"CEO steps down","sentiment":"BEARISH","confidence":0.9,"reason":"Leadership uncertainty"}]"""
 
 
 def _get_client() -> anthropic.Anthropic:
@@ -156,83 +159,108 @@ def _deduplicate(articles: list[dict], threshold: float = 0.85) -> list[dict]:
 
 # ── Haiku sentiment tagging ───────────────────────────────────────────────────
 
+_MAX_HEADLINES_FOR_HAIKU = 8
+
+
+def _haiku_call(titles: list[str], symbol: str) -> list[dict]:
+    """Make one Haiku API call and return the parsed JSON list. Raises on failure."""
+    user_content = (
+        f"Tag sentiment for stock {symbol}. Return ONLY a JSON array, nothing else.\n\n"
+        + json.dumps(titles)   # compact, no indent — reduces token count and parse risk
+    )
+    client = _get_client()
+    response = client.messages.create(
+        model=config.FILTER_MODEL,
+        max_tokens=800,
+        system=[
+            {
+                "type": "text",
+                "text": _HAIKU_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": user_content}],
+    )
+    raw = response.content[0].text.strip()
+
+    # Strip markdown fences if Haiku adds them despite instructions
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    result = json.loads(raw)   # raises JSONDecodeError on bad output
+    logger.debug(
+        "Haiku tagged %d headlines for %s (cache_read=%s)",
+        len(titles), symbol,
+        getattr(response.usage, "cache_read_input_tokens", "n/a"),
+    )
+    return result
+
+
+def _apply_tags(articles: list[dict], tagged: list[dict]) -> None:
+    """Merge Haiku tags back onto article dicts in-place by position."""
+    for i, article in enumerate(articles):
+        if i < len(tagged):
+            article["sentiment"] = tagged[i].get("sentiment", "NEUTRAL")
+            article["confidence"] = tagged[i].get("confidence", 0.5)
+            article["reason"] = tagged[i].get("reason", "")
+        else:
+            article.update({"sentiment": "NEUTRAL", "confidence": 0.5, "reason": ""})
+
+
+def _default_neutral(articles: list[dict]) -> None:
+    for a in articles:
+        a.setdefault("sentiment", "NEUTRAL")
+        a.setdefault("confidence", 0.5)
+        a.setdefault("reason", "")
+
+
 def tag_sentiment_haiku(articles: list[dict], symbol: str) -> list[dict]:
     """
-    Send all article titles to Claude Haiku in a single batched call.
-    The system prompt is marked for prompt caching (static across all calls).
-    Returns the same article list with 'sentiment', 'confidence', 'reason' added.
+    Send article titles to Claude Haiku for sentiment tagging.
+    - Caps input at 8 headlines to reduce token count and parse risk.
+    - Retries once on JSON parse failure before falling back to NEUTRAL.
+    - System prompt is prompt-cached (static across all calls in a session).
     """
     if not articles:
         return []
 
     if not config.ANTHROPIC_API_KEY:
-        logger.warning("ANTHROPIC_API_KEY not set — returning articles without sentiment")
-        for a in articles:
-            a.update({"sentiment": "NEUTRAL", "confidence": 0.5, "reason": "No API key"})
+        logger.warning("ANTHROPIC_API_KEY not set — skipping Haiku sentiment for %s", symbol)
+        _default_neutral(articles)
         return articles
 
-    titles = [a.get("title", "") for a in articles]
-    user_content = (
-        f"Tag the sentiment of each headline for stock: {symbol}\n\n"
-        + json.dumps(titles, indent=2)
-    )
+    # Cap headlines sent to Haiku
+    articles_to_tag = articles[:_MAX_HEADLINES_FOR_HAIKU]
+    titles = [a.get("title", "") for a in articles_to_tag]
 
-    try:
-        client = _get_client()
-        response = client.messages.create(
-            model=config.FILTER_MODEL,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": _HAIKU_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_content}],
-        )
-
-        raw = response.content[0].text.strip()
-
-        # Strip markdown code fences if Haiku wraps output in them
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-
-        tagged = json.loads(raw)
-
-        # Merge sentiment back onto original article dicts by position
-        for i, article in enumerate(articles):
-            if i < len(tagged):
-                article["sentiment"] = tagged[i].get("sentiment", "NEUTRAL")
-                article["confidence"] = tagged[i].get("confidence", 0.5)
-                article["reason"] = tagged[i].get("reason", "")
+    # Try once, retry once on JSON parse failure, then fall back
+    for attempt in range(2):
+        try:
+            tagged = _haiku_call(titles, symbol)
+            _apply_tags(articles_to_tag, tagged)
+            # Any articles beyond the cap default to NEUTRAL
+            for a in articles[_MAX_HEADLINES_FOR_HAIKU:]:
+                _default_neutral([a])
+            return articles
+        except json.JSONDecodeError as e:
+            if attempt == 0:
+                logger.warning(
+                    "Haiku JSON parse failed for %s (attempt 1): %s — retrying", symbol, e
+                )
             else:
-                article.update({"sentiment": "NEUTRAL", "confidence": 0.5, "reason": ""})
+                logger.warning(
+                    "Haiku JSON parse failed for %s (attempt 2): %s — defaulting to NEUTRAL",
+                    symbol, e,
+                )
+        except Exception as e:
+            logger.warning("Haiku call failed for %s: %s — defaulting to NEUTRAL", symbol, e)
+            break
 
-        logger.debug(
-            "Haiku tagged %d articles for %s (cache: %s)",
-            len(articles), symbol,
-            getattr(response.usage, "cache_read_input_tokens", "n/a"),
-        )
-        return articles
-
-    except (json.JSONDecodeError, IndexError) as e:
-        logger.warning("Haiku response parse failed for %s: %s — defaulting to NEUTRAL", symbol, e)
-        for a in articles:
-            a.setdefault("sentiment", "NEUTRAL")
-            a.setdefault("confidence", 0.5)
-            a.setdefault("reason", "")
-        return articles
-
-    except Exception as e:
-        logger.warning("Haiku tagging failed for %s: %s — defaulting to NEUTRAL", symbol, e)
-        for a in articles:
-            a.setdefault("sentiment", "NEUTRAL")
-            a.setdefault("confidence", 0.5)
-            a.setdefault("reason", "")
-        return articles
+    _default_neutral(articles)
+    return articles
 
 
 # ── Master function ───────────────────────────────────────────────────────────
