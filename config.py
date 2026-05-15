@@ -24,8 +24,8 @@ WATCHLIST = [
     # Tech / Semis (14)
     "INTC", "MU", "AMAT", "LRCX", "QCOM", "ORCL", "CRM", "ADBE",
     "MRVL", "ON", "CSCO", "HPQ", "DELL", "NET",
-    # Fintech / Brokers (8) — SQ is Block Inc's actual NYSE ticker (not XYZ)
-    "SOFI", "HOOD", "PYPL", "AFRM", "SQ", "UPST", "LC", "RKT",
+    # Fintech / Brokers (8) — XYZ is Block Inc's ticker (changed from SQ on NYSE Jan 2025)
+    "SOFI", "HOOD", "PYPL", "AFRM", "XYZ", "UPST", "LC", "RKT",
     # EVs / Auto (5)
     "F", "GM", "RIVN", "LI", "XPEV",
     # Speculative / High-volatility (9) — only $20+ names
@@ -65,7 +65,7 @@ SYMBOL_TO_COMPANY = {
     "HOOD": "Robinhood",
     "PYPL": "PayPal",
     "AFRM": "Affirm",
-    "SQ": "Block Inc",
+    "XYZ": "Block Inc",
     "UPST": "Upstart Holdings",
     "LC": "LendingClub",
     "RKT": "Rocket Companies",
