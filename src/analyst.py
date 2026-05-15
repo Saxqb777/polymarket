@@ -30,6 +30,11 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 4. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
 5. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
 
+## Price zone rules
+Each candidate is tagged GREEN or BUFFER:
+- GREEN ($10–$150): can be selected at any quality tier (PREMIUM, STANDARD, ACCEPTABLE, BELOW_BAR)
+- BUFFER ($8–$10 or $150–$175): may ONLY be selected if the setup qualifies as PREMIUM (R:R >= 3.0 AND target_move_pct >= 10%). If a buffer-zone stock's best setup is not PREMIUM, skip it and pick the next best green-zone candidate instead. The system will hard-reject a buffer-zone pick that is not PREMIUM.
+
 ## Graduated target move search (apply in order every week)
 The user is doing weekly swing trades (5–7 day holding period) on a small account ($250) with monthly capital injections and compounding. Each trade must deliver MEANINGFUL ABSOLUTE upside — a high R:R ratio on a tiny move is not worth a week of capital and attention.
 
@@ -128,9 +133,12 @@ def _format_candidate(candidate: dict) -> str:
     headlines = n.get("top_headlines", [])
     headline_str = "\n".join(f"    - {h}" for h in headlines) if headlines else "    - No headlines found"
 
+    price_zone = s.get("price_zone", "GREEN")
+    zone_note = " ⚠️ BUFFER ZONE — only pickable if PREMIUM" if price_zone == "BUFFER" else ""
+
     return f"""
-=== {sym} ===
-Price: ${t.get('last_close', s.get('last_close', 'N/A'))} | Trend: {t.get('trend', 'N/A')} | RSI: {t.get('rsi', s.get('rsi', 'N/A'))}
+=== {sym} ==={zone_note}
+Price: ${t.get('last_close', s.get('last_close', 'N/A'))} | Zone: {price_zone} | Trend: {t.get('trend', 'N/A')} | RSI: {t.get('rsi', s.get('rsi', 'N/A'))}
 MA20: ${t.get('ma20', 'N/A')} | MA50: ${t.get('ma50', 'N/A')} | MA200: ${t.get('ma200', 'N/A')}
 ATR(14): ${t.get('atr', 'N/A')} ({t.get('atr_pct', 'N/A')}% of price)
 MACD line: {t.get('macd_line', 'N/A')} | Histogram: {t.get('macd_histogram', 'N/A')}
@@ -309,6 +317,14 @@ def _no_trade(reason: str) -> dict:
 
 # ── Master function ───────────────────────────────────────────────────────────
 
+def _price_zone_of(symbol: str, candidates: list[dict]) -> str:
+    """Look up the price_zone tag for a symbol from the candidates list."""
+    for c in candidates:
+        if c.get("symbol") == symbol:
+            return c.get("price_zone", "GREEN")
+    return "GREEN"
+
+
 def analyze(candidates: list[dict]) -> dict:
     """
     Run the full analyst pipeline:
@@ -348,6 +364,21 @@ def analyze(candidates: list[dict]) -> dict:
     if not valid:
         logger.warning("Validation failed — forcing NO_TRADE. Reason: %s", reason)
         return _no_trade(f"Trade rejected by risk validation: {reason}")
+
+    # ── Buffer zone enforcement ───────────────────────────────────────────────
+    if result.get("decision") == "TRADE":
+        picked_symbol = result.get("symbol")
+        zone = _price_zone_of(picked_symbol, candidates)
+        if zone == "BUFFER" and result.get("quality_tier") != "PREMIUM":
+            logger.warning(
+                "Buffer zone rejection: %s picked but quality_tier=%s (need PREMIUM)",
+                picked_symbol, result.get("quality_tier"),
+            )
+            return _no_trade(
+                f"{picked_symbol} is in the buffer price zone (${result.get('entry_price')}) "
+                f"and requires a PREMIUM setup (R:R >= 3.0, target >= 10%%). "
+                f"Best setup was {result.get('quality_tier')} — no green-zone alternative available."
+            )
 
     decision = result.get("decision", "NO_TRADE")
     logger.info(

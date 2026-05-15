@@ -66,6 +66,13 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
         if not (config.SCANNER_MIN_PRICE <= last_close <= config.SCANNER_MAX_PRICE):
             return None
 
+        # Tag price zone — analyst enforces PREMIUM-only for BUFFER picks
+        price_zone = (
+            "BUFFER"
+            if last_close < config.PRICE_GREEN_MIN or last_close > config.PRICE_GREEN_MAX
+            else "GREEN"
+        )
+
         vol_20d_avg = float(volume.iloc[-20:].mean())
         if vol_20d_avg < config.SCANNER_MIN_VOLUME_20D_AVG:
             return None
@@ -111,6 +118,7 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
             "above_50ma": last_close > ma50,
             "ma20": round(ma20, 2),
             "ma20_slope": round(ma20_slope, 4),
+            "price_zone": price_zone,
         }
 
     except Exception as e:

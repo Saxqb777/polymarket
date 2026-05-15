@@ -19,12 +19,15 @@ PAPER_TRADE_WEEKS_MIN = 4
 # ── Timezone ───────────────────────────────────────────────────────────────────
 GULF_TZ = pytz.timezone("Asia/Dubai")  # UTC+4, no DST
 
-# ── Watchlist (~120 tickers, $20-$100 range, updated 2026-05-15) ──────────────
+# ── Watchlist (101 tickers, tiered $8-$175, updated 2026-05-15) ───────────────
+# GREEN ZONE ($10-$150): picked freely by the analyst
+# BUFFER ZONE ($8-$10 or $150-$175): analyst may only pick if setup is PREMIUM
+# Tickers above $175 or below $8 are excluded at scanner hard-filter time
 WATCHLIST = [
-    # Tech / Semis (24)
-    "INTC", "MU", "AMAT", "LRCX", "QCOM", "ORCL", "CRM", "ADBE",
-    "MRVL", "ON", "CSCO", "HPQ", "DELL", "NET",
-    "PSTG", "WDC", "STX", "SWKS", "CIEN", "MCHP", "LSCC", "BOX", "AKAM", "COHR",
+    # Tech / Semis (11) — CRM and AKAM are BUFFER ($150-$175)
+    "INTC", "ON", "CSCO", "HPQ",
+    "PSTG", "SWKS", "MCHP", "LSCC", "BOX",
+    "CRM", "AKAM",
     # Fintech / Brokers / Payments (12)
     "SOFI", "HOOD", "PYPL", "AFRM", "XYZ", "UPST", "LC", "RKT",
     "BILL", "FOUR", "TOST", "SSNC",
@@ -32,17 +35,17 @@ WATCHLIST = [
     "F", "GM", "RIVN", "LI", "XPEV",
     # Speculative / High-volatility (9)
     "RGTI", "IONQ", "QBTS", "RKLB", "ASTS", "IREN", "MARA", "OKLO", "SMR",
-    # Consumer / Travel / Leisure / Retail (19)
+    # Consumer / Travel / Leisure / Retail (17) — DASH is BUFFER ($150-$175)
     "UBER", "ABNB", "DASH", "DKNG", "EBAY", "TGT", "KO", "KHC",
-    "PINS", "SNAP", "RBLX", "U",
-    "CCL", "NCLH", "MGM", "LVS", "GPS", "WYNN", "PLAY",
-    # Energy / Materials / Industrials (20)
-    "XOM", "OXY", "DVN", "MPC", "HAL", "SLB", "KMI", "ENPH", "FSLR",
+    "PINS", "RBLX", "U",
+    "CCL", "NCLH", "MGM", "LVS", "WYNN", "PLAY",
+    # Energy / Materials / Industrials (18)
+    "XOM", "OXY", "DVN", "HAL", "SLB", "KMI", "ENPH",
     "APA", "EQT", "CTRA", "FCX", "CF", "NEM", "MOS",
     "FTV", "KTOS", "DRS", "OLN",
-    # Healthcare / Biotech (15)
+    # Healthcare / Biotech (13)
     "PFE", "MRNA", "BMY", "GILD", "CVS", "TEVA", "HIMS",
-    "DXCM", "HOLX", "EXAS", "INCY", "CRSP", "JAZZ", "NTRA", "EXEL",
+    "DXCM", "HOLX", "EXAS", "INCY", "CRSP", "EXEL",
     # China ADRs (7)
     "JD", "PDD",
     "FUTU", "EDU", "HTHT", "BZ", "MNSO",
@@ -56,19 +59,10 @@ WATCHLIST = [
 SYMBOL_TO_COMPANY = {
     # Tech / Semis
     "INTC": "Intel",
-    "MU": "Micron Technology",
-    "AMAT": "Applied Materials",
-    "LRCX": "Lam Research",
-    "QCOM": "Qualcomm",
-    "ORCL": "Oracle",
     "CRM": "Salesforce",
-    "ADBE": "Adobe",
-    "MRVL": "Marvell Technology",
     "ON": "ON Semiconductor",
     "CSCO": "Cisco Systems",
     "HPQ": "HP Inc",
-    "DELL": "Dell Technologies",
-    "NET": "Cloudflare",
     # Fintech / Brokers
     "SOFI": "SoFi Technologies",
     "HOOD": "Robinhood",
@@ -104,19 +98,33 @@ SYMBOL_TO_COMPANY = {
     "KO": "Coca-Cola",
     "KHC": "Kraft Heinz",
     "PINS": "Pinterest",
-    "SNAP": "Snap Inc",
     "RBLX": "Roblox",
     "U": "Unity Software",
+    "CCL": "Carnival Corporation",
+    "NCLH": "Norwegian Cruise Line",
+    "MGM": "MGM Resorts International",
+    "LVS": "Las Vegas Sands",
+    "WYNN": "Wynn Resorts",
+    "PLAY": "Dave and Busters Entertainment",
     # Energy / Materials / Industrials
     "XOM": "ExxonMobil",
     "OXY": "Occidental Petroleum",
     "DVN": "Devon Energy",
-    "MPC": "Marathon Petroleum",
     "HAL": "Halliburton",
     "SLB": "Schlumberger",
     "KMI": "Kinder Morgan",
     "ENPH": "Enphase Energy",
-    "FSLR": "First Solar",
+    "APA": "APA Corporation",
+    "EQT": "EQT Corporation",
+    "CTRA": "Coterra Energy",
+    "FCX": "Freeport-McMoRan",
+    "CF": "CF Industries",
+    "NEM": "Newmont Corporation",
+    "MOS": "Mosaic Company",
+    "FTV": "Fortive Corporation",
+    "KTOS": "Kratos Defense and Security",
+    "DRS": "Leonardo DRS",
+    "OLN": "Olin Corporation",
     # Healthcare / Biotech
     "PFE": "Pfizer",
     "MRNA": "Moderna",
@@ -125,67 +133,38 @@ SYMBOL_TO_COMPANY = {
     "CVS": "CVS Health",
     "TEVA": "Teva Pharmaceutical",
     "HIMS": "Hims and Hers Health",
-    # China ADRs
-    "JD": "JD.com",
-    "PDD": "PDD Holdings",
-    # Media / Entertainment
-    "DIS": "Walt Disney",
-    "T": "AT&T",
-    "VZ": "Verizon",
-    "CMCSA": "Comcast",
-    # Tech / Semis (new)
-    "PSTG": "Pure Storage",
-    "WDC": "Western Digital",
-    "STX": "Seagate Technology",
-    "SWKS": "Skyworks Solutions",
-    "CIEN": "Ciena Corporation",
-    "MCHP": "Microchip Technology",
-    "LSCC": "Lattice Semiconductor",
-    "BOX": "Box Inc",
-    "AKAM": "Akamai Technologies",
-    "COHR": "Coherent Corp",
-    # Payments / Fintech (new)
-    "BILL": "Bill.com Holdings",
-    "FOUR": "Shift4 Payments",
-    "TOST": "Toast Inc",
-    "SSNC": "SS&C Technologies",
-    # Consumer / Leisure (new)
-    "CCL": "Carnival Corporation",
-    "NCLH": "Norwegian Cruise Line",
-    "MGM": "MGM Resorts International",
-    "LVS": "Las Vegas Sands",
-    "GPS": "Gap Inc",
-    "WYNN": "Wynn Resorts",
-    "PLAY": "Dave and Busters Entertainment",
-    # Energy / Materials (new)
-    "APA": "APA Corporation",
-    "EQT": "EQT Corporation",
-    "CTRA": "Coterra Energy",
-    "FCX": "Freeport-McMoRan",
-    "CF": "CF Industries",
-    "NEM": "Newmont Corporation",
-    "MOS": "Mosaic Company",
-    # Industrials / Defence (new)
-    "FTV": "Fortive Corporation",
-    "KTOS": "Kratos Defense and Security",
-    "DRS": "Leonardo DRS",
-    "OLN": "Olin Corporation",
-    # China ADRs (new)
-    "FUTU": "Futu Holdings",
-    "EDU": "New Oriental Education",
-    "HTHT": "H World Group",
-    "BZ": "Kanzhun BOSS Zhipin",
-    "MNSO": "MINISO Group",
-    # Healthcare / Biotech (new)
     "DXCM": "Dexcom",
     "HOLX": "Hologic",
     "EXAS": "Exact Sciences",
     "INCY": "Incyte Corporation",
     "CRSP": "CRISPR Therapeutics",
-    "JAZZ": "Jazz Pharmaceuticals",
-    "NTRA": "Natera",
     "EXEL": "Exelixis",
-    # Momentum / Misc (new)
+    # China ADRs
+    "JD": "JD.com",
+    "PDD": "PDD Holdings",
+    "FUTU": "Futu Holdings",
+    "EDU": "New Oriental Education",
+    "HTHT": "H World Group",
+    "BZ": "Kanzhun BOSS Zhipin",
+    "MNSO": "MINISO Group",
+    # Media / Entertainment
+    "DIS": "Walt Disney",
+    "T": "AT&T",
+    "VZ": "Verizon",
+    "CMCSA": "Comcast",
+    # Tech / Semis (extended)
+    "PSTG": "Pure Storage",
+    "SWKS": "Skyworks Solutions",
+    "MCHP": "Microchip Technology",
+    "LSCC": "Lattice Semiconductor",
+    "BOX": "Box Inc",
+    "AKAM": "Akamai Technologies",
+    # Payments / Fintech (extended)
+    "BILL": "Bill.com Holdings",
+    "FOUR": "Shift4 Payments",
+    "TOST": "Toast Inc",
+    "SSNC": "SS&C Technologies",
+    # Momentum / Misc
     "CELH": "Celsius Holdings",
     "LMND": "Lemonade Inc",
     "FLNC": "Fluence Energy",
@@ -195,11 +174,17 @@ SYMBOL_TO_COMPANY = {
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
 SCANNER_MIN_VOLUME_20D_AVG = 1_000_000   # shares/day — avoid illiquid names
-SCANNER_MIN_PRICE = 10.0
-SCANNER_MAX_PRICE = 1_000.0
-SCANNER_RSI_MIN = 40                      # not deeply oversold
-SCANNER_RSI_MAX = 75                      # not extended / overbought
-SCANNER_TOP_N = 10                        # candidates passed to analyst
+SCANNER_MIN_PRICE = 8.0                  # hard floor — below this, skip entirely
+SCANNER_MAX_PRICE = 175.0               # hard ceiling — above this, skip entirely
+PRICE_GREEN_MIN = 10.0                   # green zone lower bound
+PRICE_GREEN_MAX = 150.0                  # green zone upper bound
+PRICE_BUFFER_MIN = 8.0                   # buffer zone lower bound (= SCANNER_MIN_PRICE)
+PRICE_BUFFER_MAX = 175.0                 # buffer zone upper bound (= SCANNER_MAX_PRICE)
+# Buffer zone ($8-$10 or $150-$175): candidate passes hard filter but analyst may
+# only pick it if the setup qualifies as PREMIUM (R:R >= 3.0 AND target_move >= 10%).
+SCANNER_RSI_MIN = 40                     # not deeply oversold
+SCANNER_RSI_MAX = 75                     # not extended / overbought
+SCANNER_TOP_N = 10                       # candidates passed to analyst
 
 # ── Technical indicator periods ────────────────────────────────────────────────
 MA_SHORT = 20
