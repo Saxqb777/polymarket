@@ -19,204 +19,111 @@ PAPER_TRADE_WEEKS_MIN = 4
 # ── Timezone ───────────────────────────────────────────────────────────────────
 GULF_TZ = pytz.timezone("Asia/Dubai")  # UTC+4, no DST
 
-# ── Watchlist (147 tickers, expanded 2026-05-14) ──────────────────────────────
+# ── Watchlist (~95 tickers, $20-$100 range, updated 2026-05-15) ───────────────
 WATCHLIST = [
-    # Technology (15)
-    "AAPL", "MSFT", "NVDA", "AMD", "GOOGL", "META", "AMZN", "CRM", "ADBE", "ORCL",
-    "QCOM", "INTC", "MU", "AMAT", "LRCX",
-    # High-volatility growth (6)
-    "PLTR", "COIN", "SNOW", "UBER", "PANW", "AVGO",
-    # Healthcare (10)
-    "JNJ", "UNH", "PFE", "ABBV", "MRK", "LLY", "TMO", "DHR", "ABT", "ISRG",
-    # Financials (10)
-    "JPM", "BAC", "GS", "MS", "V", "MA", "AXP", "BLK", "SCHW", "C",
-    # Energy (6)
-    "XOM", "CVX", "COP", "SLB", "EOG", "FANG",
-    # Consumer Discretionary (8)
-    "TSLA", "HD", "MCD", "NKE", "SBUX", "TGT", "LOW", "BKNG",
-    # Consumer Staples (6)
-    "WMT", "PG", "KO", "PEP", "COST", "PM",
-    # Industrials (7)
-    "CAT", "BA", "HON", "UPS", "RTX", "DE", "LMT",
-    # Materials / Utilities / Real Estate (5)
-    "LIN", "APD", "NEE", "AMT", "SPG",
-    # Momentum mid/large caps (31)
-    "NOW", "ANET", "MRVL", "ON", "KLAC", "ASML", "ARM", "SMCI", "DELL", "HPQ",
-    "SHOP", "NET", "DDOG", "CRWD", "ZS", "SNPS", "CDNS", "FTNT", "TEAM", "WDAY",
-    "ABNB", "DASH", "RBLX", "U", "ROKU", "SNAP", "PINS", "SQ", "HOOD", "DKNG",
-    "AFRM",
-    # China ADRs (8)
-    "BABA", "PDD", "JD", "NIO", "LI", "XPEV", "BIDU", "BILI",
-    # Speculative / high-volatility (27)
-    "RGTI", "IONQ", "QBTS", "RKLB", "ASTS", "LUNR", "ACHR", "JOBY", "PLUG", "BBAI",
-    "SOUN", "IREN", "RIOT", "MARA", "OKLO", "SMR", "CIFR", "CLSK", "WULF", "APLD",
-    "AI", "LCID", "RIVN", "CHPT", "RUN", "ENPH", "FSLR",
-    # Active sector (8)
-    "MRNA", "VRTX", "GILD", "REGN", "OXY", "DVN", "MPC", "PSX",
+    # Tech / Semis (14)
+    "INTC", "MU", "AMAT", "LRCX", "QCOM", "ORCL", "CRM", "ADBE",
+    "MRVL", "ON", "CSCO", "HPQ", "DELL", "NET",
+    # Fintech / Brokers (8) — SQ is Block Inc's actual NYSE ticker (not XYZ)
+    "SOFI", "HOOD", "PYPL", "AFRM", "SQ", "UPST", "LC", "RKT",
+    # EVs / Auto (5)
+    "F", "GM", "RIVN", "LI", "XPEV",
+    # Speculative / High-volatility (9) — only $20+ names
+    "RGTI", "IONQ", "QBTS", "RKLB", "ASTS", "IREN", "MARA", "OKLO", "SMR",
+    # Consumer / Travel / Retail (12)
+    "UBER", "ABNB", "DASH", "DKNG", "EBAY", "TGT", "KO", "KHC",
+    "PINS", "SNAP", "RBLX", "U",
+    # Energy / Materials / Industrials (9)
+    "XOM", "OXY", "DVN", "MPC", "HAL", "SLB", "KMI", "ENPH", "FSLR",
+    # Healthcare / Biotech (7)
+    "PFE", "MRNA", "BMY", "GILD", "CVS", "TEVA", "HIMS",
+    # China ADRs (2)
+    "JD", "PDD",
+    # Media / Entertainment (4)
+    "DIS", "T", "VZ", "CMCSA",
 ]
 
 # ── Company name mapping (for news queries) ────────────────────────────────────
 SYMBOL_TO_COMPANY = {
-    # Technology
-    "AAPL": "Apple",
-    "MSFT": "Microsoft",
-    "NVDA": "Nvidia",
-    "AMD": "Advanced Micro Devices",
-    "GOOGL": "Alphabet Inc",
-    "META": "Meta Platforms",
-    "AMZN": "Amazon",
-    "CRM": "Salesforce",
-    "ADBE": "Adobe",
-    "ORCL": "Oracle",
-    "QCOM": "Qualcomm",
+    # Tech / Semis
     "INTC": "Intel",
     "MU": "Micron Technology",
     "AMAT": "Applied Materials",
     "LRCX": "Lam Research",
-    # High-volatility growth
-    "PLTR": "Palantir",
-    "COIN": "Coinbase",
-    "SNOW": "Snowflake",
-    "UBER": "Uber",
-    "PANW": "Palo Alto Networks",
-    "AVGO": "Broadcom",
-    # Healthcare
-    "JNJ": "Johnson Johnson",
-    "UNH": "UnitedHealth",
-    "PFE": "Pfizer",
-    "ABBV": "AbbVie",
-    "MRK": "Merck",
-    "LLY": "Eli Lilly",
-    "TMO": "Thermo Fisher Scientific",
-    "DHR": "Danaher",
-    "ABT": "Abbott Laboratories",
-    "ISRG": "Intuitive Surgical",
-    # Financials
-    "JPM": "JPMorgan Chase",
-    "BAC": "Bank of America",
-    "GS": "Goldman Sachs",
-    "MS": "Morgan Stanley",
-    "V": "Visa Inc",
-    "MA": "Mastercard",
-    "AXP": "American Express",
-    "BLK": "BlackRock",
-    "SCHW": "Charles Schwab",
-    "C": "Citigroup",
-    # Energy
-    "XOM": "ExxonMobil",
-    "CVX": "Chevron",
-    "COP": "ConocoPhillips",
-    "SLB": "Schlumberger",
-    "EOG": "EOG Resources",
-    "FANG": "Diamondback Energy",
-    # Consumer Discretionary
-    "TSLA": "Tesla",
-    "HD": "Home Depot",
-    "MCD": "McDonald's",
-    "NKE": "Nike",
-    "SBUX": "Starbucks",
-    "TGT": "Target",
-    "LOW": "Lowe's",
-    "BKNG": "Booking Holdings",
-    # Consumer Staples
-    "WMT": "Walmart",
-    "PG": "Procter Gamble",
-    "KO": "Coca-Cola",
-    "PEP": "PepsiCo",
-    "COST": "Costco",
-    "PM": "Philip Morris",
-    # Industrials
-    "CAT": "Caterpillar",
-    "BA": "Boeing",
-    "HON": "Honeywell",
-    "UPS": "United Parcel Service",
-    "RTX": "RTX Raytheon",
-    "DE": "John Deere",
-    "LMT": "Lockheed Martin",
-    # Materials / Utilities / Real Estate
-    "LIN": "Linde",
-    "APD": "Air Products",
-    "NEE": "NextEra Energy",
-    "AMT": "American Tower",
-    "SPG": "Simon Property Group",
-    # Momentum mid/large caps
-    "NOW": "ServiceNow",
-    "ANET": "Arista Networks",
+    "QCOM": "Qualcomm",
+    "ORCL": "Oracle",
+    "CRM": "Salesforce",
+    "ADBE": "Adobe",
     "MRVL": "Marvell Technology",
     "ON": "ON Semiconductor",
-    "KLAC": "KLA Corporation",
-    "ASML": "ASML Holding",
-    "ARM": "Arm Holdings",
-    "SMCI": "Super Micro Computer",
-    "DELL": "Dell Technologies",
+    "CSCO": "Cisco Systems",
     "HPQ": "HP Inc",
-    "SHOP": "Shopify",
+    "DELL": "Dell Technologies",
     "NET": "Cloudflare",
-    "DDOG": "Datadog",
-    "CRWD": "CrowdStrike",
-    "ZS": "Zscaler",
-    "SNPS": "Synopsys",
-    "CDNS": "Cadence Design Systems",
-    "FTNT": "Fortinet",
-    "TEAM": "Atlassian",
-    "WDAY": "Workday",
-    "ABNB": "Airbnb",
-    "DASH": "DoorDash",
-    "RBLX": "Roblox",
-    "U": "Unity Software",
-    "ROKU": "Roku",
-    "SNAP": "Snap",
-    "PINS": "Pinterest",
-    "SQ": "Block Inc",
+    # Fintech / Brokers
+    "SOFI": "SoFi Technologies",
     "HOOD": "Robinhood",
-    "DKNG": "DraftKings",
+    "PYPL": "PayPal",
     "AFRM": "Affirm",
-    # China ADRs
-    "BABA": "Alibaba",
-    "PDD": "PDD Holdings",
-    "JD": "JD.com",
-    "NIO": "NIO Inc",
+    "SQ": "Block Inc",
+    "UPST": "Upstart Holdings",
+    "LC": "LendingClub",
+    "RKT": "Rocket Companies",
+    # EVs / Auto
+    "F": "Ford Motor",
+    "GM": "General Motors",
+    "RIVN": "Rivian Automotive",
     "LI": "Li Auto",
     "XPEV": "XPeng",
-    "BIDU": "Baidu",
-    "BILI": "Bilibili",
-    # Speculative / high-volatility
+    # Speculative / High-volatility
     "RGTI": "Rigetti Computing",
     "IONQ": "IonQ",
     "QBTS": "D-Wave Quantum",
     "RKLB": "Rocket Lab",
     "ASTS": "AST SpaceMobile",
-    "LUNR": "Intuitive Machines",
-    "ACHR": "Archer Aviation",
-    "JOBY": "Joby Aviation",
-    "PLUG": "Plug Power",
-    "BBAI": "BigBear.ai",
-    "SOUN": "SoundHound AI",
-    "IREN": "IREN Ltd",
-    "RIOT": "Riot Platforms",
-    "MARA": "Marathon Digital Holdings",
+    "IREN": "IREN Limited",
+    "MARA": "MARA Holdings",
     "OKLO": "Oklo Inc",
     "SMR": "NuScale Power",
-    "CIFR": "Cipher Mining",
-    "CLSK": "CleanSpark",
-    "WULF": "TeraWulf",
-    "APLD": "Applied Digital",
-    "AI": "C3.ai",
-    "LCID": "Lucid Group",
-    "RIVN": "Rivian",
-    "CHPT": "ChargePoint",
-    "RUN": "Sunrun",
-    "ENPH": "Enphase Energy",
-    "FSLR": "First Solar",
-    # Active sector
-    "MRNA": "Moderna",
-    "VRTX": "Vertex Pharmaceuticals",
-    "GILD": "Gilead Sciences",
-    "REGN": "Regeneron Pharmaceuticals",
+    # Consumer / Travel / Retail
+    "UBER": "Uber",
+    "ABNB": "Airbnb",
+    "DASH": "DoorDash",
+    "DKNG": "DraftKings",
+    "EBAY": "eBay",
+    "TGT": "Target",
+    "KO": "Coca-Cola",
+    "KHC": "Kraft Heinz",
+    "PINS": "Pinterest",
+    "SNAP": "Snap Inc",
+    "RBLX": "Roblox",
+    "U": "Unity Software",
+    # Energy / Materials / Industrials
+    "XOM": "ExxonMobil",
     "OXY": "Occidental Petroleum",
     "DVN": "Devon Energy",
     "MPC": "Marathon Petroleum",
-    "PSX": "Phillips 66",
+    "HAL": "Halliburton",
+    "SLB": "Schlumberger",
+    "KMI": "Kinder Morgan",
+    "ENPH": "Enphase Energy",
+    "FSLR": "First Solar",
+    # Healthcare / Biotech
+    "PFE": "Pfizer",
+    "MRNA": "Moderna",
+    "BMY": "Bristol Myers Squibb",
+    "GILD": "Gilead Sciences",
+    "CVS": "CVS Health",
+    "TEVA": "Teva Pharmaceutical",
+    "HIMS": "Hims and Hers Health",
+    # China ADRs
+    "JD": "JD.com",
+    "PDD": "PDD Holdings",
+    # Media / Entertainment
+    "DIS": "Walt Disney",
+    "T": "AT&T",
+    "VZ": "Verizon",
+    "CMCSA": "Comcast",
 }
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
