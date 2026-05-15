@@ -19,28 +19,37 @@ PAPER_TRADE_WEEKS_MIN = 4
 # ── Timezone ───────────────────────────────────────────────────────────────────
 GULF_TZ = pytz.timezone("Asia/Dubai")  # UTC+4, no DST
 
-# ── Watchlist (~95 tickers, $20-$100 range, updated 2026-05-15) ───────────────
+# ── Watchlist (~120 tickers, $20-$100 range, updated 2026-05-15) ──────────────
 WATCHLIST = [
-    # Tech / Semis (14)
+    # Tech / Semis (24)
     "INTC", "MU", "AMAT", "LRCX", "QCOM", "ORCL", "CRM", "ADBE",
     "MRVL", "ON", "CSCO", "HPQ", "DELL", "NET",
-    # Fintech / Brokers (8) — XYZ is Block Inc's ticker (changed from SQ on NYSE Jan 2025)
+    "PSTG", "WDC", "STX", "SWKS", "CIEN", "MCHP", "LSCC", "BOX", "AKAM", "COHR",
+    # Fintech / Brokers / Payments (12)
     "SOFI", "HOOD", "PYPL", "AFRM", "XYZ", "UPST", "LC", "RKT",
+    "BILL", "FOUR", "TOST", "SSNC",
     # EVs / Auto (5)
     "F", "GM", "RIVN", "LI", "XPEV",
-    # Speculative / High-volatility (9) — only $20+ names
+    # Speculative / High-volatility (9)
     "RGTI", "IONQ", "QBTS", "RKLB", "ASTS", "IREN", "MARA", "OKLO", "SMR",
-    # Consumer / Travel / Retail (12)
+    # Consumer / Travel / Leisure / Retail (19)
     "UBER", "ABNB", "DASH", "DKNG", "EBAY", "TGT", "KO", "KHC",
     "PINS", "SNAP", "RBLX", "U",
-    # Energy / Materials / Industrials (9)
+    "CCL", "NCLH", "MGM", "LVS", "GPS", "WYNN", "PLAY",
+    # Energy / Materials / Industrials (20)
     "XOM", "OXY", "DVN", "MPC", "HAL", "SLB", "KMI", "ENPH", "FSLR",
-    # Healthcare / Biotech (7)
+    "APA", "EQT", "CTRA", "FCX", "CF", "NEM", "MOS",
+    "FTV", "KTOS", "DRS", "OLN",
+    # Healthcare / Biotech (15)
     "PFE", "MRNA", "BMY", "GILD", "CVS", "TEVA", "HIMS",
-    # China ADRs (2)
+    "DXCM", "HOLX", "EXAS", "INCY", "CRSP", "JAZZ", "NTRA", "EXEL",
+    # China ADRs (7)
     "JD", "PDD",
+    "FUTU", "EDU", "HTHT", "BZ", "MNSO",
     # Media / Entertainment (4)
     "DIS", "T", "VZ", "CMCSA",
+    # Momentum / Misc (5)
+    "CELH", "LMND", "FLNC", "AMKR", "FORM",
 ]
 
 # ── Company name mapping (for news queries) ────────────────────────────────────
@@ -124,6 +133,64 @@ SYMBOL_TO_COMPANY = {
     "T": "AT&T",
     "VZ": "Verizon",
     "CMCSA": "Comcast",
+    # Tech / Semis (new)
+    "PSTG": "Pure Storage",
+    "WDC": "Western Digital",
+    "STX": "Seagate Technology",
+    "SWKS": "Skyworks Solutions",
+    "CIEN": "Ciena Corporation",
+    "MCHP": "Microchip Technology",
+    "LSCC": "Lattice Semiconductor",
+    "BOX": "Box Inc",
+    "AKAM": "Akamai Technologies",
+    "COHR": "Coherent Corp",
+    # Payments / Fintech (new)
+    "BILL": "Bill.com Holdings",
+    "FOUR": "Shift4 Payments",
+    "TOST": "Toast Inc",
+    "SSNC": "SS&C Technologies",
+    # Consumer / Leisure (new)
+    "CCL": "Carnival Corporation",
+    "NCLH": "Norwegian Cruise Line",
+    "MGM": "MGM Resorts International",
+    "LVS": "Las Vegas Sands",
+    "GPS": "Gap Inc",
+    "WYNN": "Wynn Resorts",
+    "PLAY": "Dave and Busters Entertainment",
+    # Energy / Materials (new)
+    "APA": "APA Corporation",
+    "EQT": "EQT Corporation",
+    "CTRA": "Coterra Energy",
+    "FCX": "Freeport-McMoRan",
+    "CF": "CF Industries",
+    "NEM": "Newmont Corporation",
+    "MOS": "Mosaic Company",
+    # Industrials / Defence (new)
+    "FTV": "Fortive Corporation",
+    "KTOS": "Kratos Defense and Security",
+    "DRS": "Leonardo DRS",
+    "OLN": "Olin Corporation",
+    # China ADRs (new)
+    "FUTU": "Futu Holdings",
+    "EDU": "New Oriental Education",
+    "HTHT": "H World Group",
+    "BZ": "Kanzhun BOSS Zhipin",
+    "MNSO": "MINISO Group",
+    # Healthcare / Biotech (new)
+    "DXCM": "Dexcom",
+    "HOLX": "Hologic",
+    "EXAS": "Exact Sciences",
+    "INCY": "Incyte Corporation",
+    "CRSP": "CRISPR Therapeutics",
+    "JAZZ": "Jazz Pharmaceuticals",
+    "NTRA": "Natera",
+    "EXEL": "Exelixis",
+    # Momentum / Misc (new)
+    "CELH": "Celsius Holdings",
+    "LMND": "Lemonade Inc",
+    "FLNC": "Fluence Energy",
+    "AMKR": "Amkor Technology",
+    "FORM": "FormFactor",
 }
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
