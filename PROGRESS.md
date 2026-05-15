@@ -6,12 +6,21 @@
 
 ## 📍 Current Status
 
-**Phase:** Dashboard — Step 1 complete (FastAPI skeleton)
-**Next step:** Dashboard Step 2 — HTTP Basic Auth password gate
+**Phase:** Dashboard — Step 2 complete (HTTP Basic Auth)
+**Next step:** Dashboard Step 3 — database read layer (queries.py)
 
 ---
 
 ## 📝 Log
+
+### 2026-05-15 — Dashboard Step 2: HTTP Basic Auth
+- `dashboard/auth.py`: HTTPBasic dependency, username="saaqib", password from DASHBOARD_PASSWORD env var
+- Fails loudly at startup if DASHBOARD_PASSWORD is missing (no silent defaults)
+- `GET /` gated — wrong credentials → 401 + browser auth prompt
+- `GET /health` unauthenticated (Railway health checks need this open)
+- `GET /logout` returns 401 to force browser to clear stored credentials
+- Added DASHBOARD_PASSWORD=changeme to .env.example
+- Tested: correct creds → 200, wrong creds → 401, wrong user → 401
 
 ### 2026-05-15 — Dashboard Step 1: FastAPI skeleton
 - Created `dashboard/` folder with `__init__.py` and `main.py`
