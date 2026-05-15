@@ -161,18 +161,30 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
     risk_lines = "\n".join(f"• {_esc(rk)}" for rk in risks) if risks else _esc("None identified")
     conf_emoji = {"HIGH": "🔥", "MEDIUM": "🟡", "LOW": "🟠"}.get(r.get("confidence", ""), "🟡")
 
-    meets_quality_bar = r.get("meets_quality_bar", True)
-    if meets_quality_bar is False:
+    quality_tier = r.get("quality_tier", "BELOW_BAR")
+    target_move_pct = r.get("target_move_pct")
+    move_str = _esc(f"+{target_move_pct:.1f}%") if target_move_pct is not None else "N/A"
+    tier_str = _esc(quality_tier or "BELOW_BAR")
+
+    if quality_tier == "PREMIUM":
+        header = "🌟 *PREMIUM WEEKLY TRADE PICK*"
+        quality_block = (
+            f"\n"
+            f"⭐ _Premium setup \\(R:R {_esc(str(rr))}\\+, target move {move_str}\\)_\n"
+            f"_Consider sizing up beyond your standard position\\._\n"
+        )
+    elif quality_tier == "BELOW_BAR":
+        header = "📋 *BEST AVAILABLE \\(BELOW BAR\\)*"
         quality_block = (
             f"\n"
             f"⚠️ *BELOW QUALITY BAR*\n"
-            f"R:R is only 1:{_esc(str(rr))}\\.  The math is not strongly in your favor this week\\.\n"
+            f"R:R is only 1:{_esc(str(rr))} and target move is {move_str}\\.\n"
+            f"The math is not strongly in your favor this week\\.\n"
             f"Trading this is your call — the bot does not recommend it\\.\n"
         )
-        header = "📋 *BEST AVAILABLE \\(BELOW BAR\\)*"
     else:
-        quality_block = ""
         header = "🎯 *WEEKLY TRADE PICK*"
+        quality_block = ""
 
     return (
         f"{header}\n"
@@ -186,6 +198,7 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
         f"🛑 Stop Loss     \\${_fmt_price(stop)}  \\({_fmt_signed(stop_diff)}\\)\n"
         f"🎯 Target        \\${_fmt_price(target)}  \\({_fmt_signed(target_diff)}\\)\n"
         f"⚖️  R:R           1:{_esc(str(rr))}\n"
+        f"📊 Target move   {move_str}   Tier: {tier_str}\n"
         f"\n"
         f"💰 *Suggested size* \\(1% risk rule\\)\n"
         f"  ≈{sug_shares} shares \\(≈\\${sug_value}\\)\n"

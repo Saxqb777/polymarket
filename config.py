@@ -11,7 +11,7 @@ MAX_POSITION_SIZE_PCT = float(os.getenv("MAX_POSITION_SIZE_PCT", 0.05))
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 
 # ── Risk Rules (hardcoded — never change these) ────────────────────────────────
-MIN_RISK_REWARD = 1.8
+MIN_RISK_REWARD = 2.5
 EARNINGS_BLACKOUT_DAYS = 7
 MONTHLY_DRAWDOWN_CAP_PCT = 0.08
 PAPER_TRADE_WEEKS_MIN = 4

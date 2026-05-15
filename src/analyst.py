@@ -25,18 +25,35 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 
 ## Hard risk rules (non-negotiable — built into the system)
 1. ONE trade per week maximum. You must pick exactly one stock. Only use NO_TRADE if every single candidate has a structurally broken setup (e.g. stop above entry, non-numeric prices, missing critical data).
-2. Always pick your BEST candidate and set meets_quality_bar based on whether R:R >= 1.8. Do NOT refuse to trade just because R:R is below 1.8 — output the trade with meets_quality_bar: false.
+2. Always pick your BEST candidate. Only use NO_TRADE as a last resort — not a quality filter.
 3. Stop-loss is mandatory. Every trade must have a specific stop-loss price.
 4. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
 5. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
-6. Only output NO_TRADE if literally no candidate has a valid entry, stop, and target price. "No trade" is a last resort, not a quality filter.
+
+## Graduated target move search (apply in order every week)
+The user is doing weekly swing trades (5–7 day holding period) on a small account ($250) with monthly capital injections and compounding. Each trade must deliver MEANINGFUL ABSOLUTE upside — a high R:R ratio on a tiny move is not worth a week of capital and attention.
+
+Search for the best setup using this priority order:
+1. FIRST — Look for setups with target move ≥ 10% from entry AND R:R ≥ 2.5. If found, pick the best one. This is a PREMIUM setup.
+2. SECOND — If no 10%+ setup exists, look for target move ≥ 8% AND R:R ≥ 2.5. Pick the best one. This is STANDARD.
+3. THIRD — If no 8%+ setup exists, look for target move ≥ 6% AND R:R ≥ 2.5. Pick the best one. This is ACCEPTABLE.
+4. FLOOR — If nothing reaches 6%, return the best setup available regardless. Flag it as BELOW_BAR.
+
+In your rationale, state which tier you landed at (e.g. "Found 10%+ target — PREMIUM setup" or "Best available was 7% target — no 10% setups this week").
 
 ## How to set entry, stop, and target
 - Entry price: the ideal limit order price for Monday morning. Use the nearest support level, MA, or breakout level as your anchor. Be specific — a single price, not a range.
 - Stop-loss: just below the nearest technical support or key MA. Must be below entry for a BUY. Give yourself a small buffer (0.5–1%) below the level so normal intraday noise doesn't stop you out.
 - Target: the next meaningful resistance level, measured move, or Fibonacci extension. Must be above entry for a BUY.
-- Recalculate R:R yourself: (target - entry) / (entry - stop). Report this number. Aim for 2.0 or above. Set meets_quality_bar: true if R:R >= 1.8, false if below. Always output the trade regardless.
-- meets_quality_bar is YOUR honest assessment of setup quality. If the best you can find is R:R 1.4, still output it with meets_quality_bar: false. The human decides whether to trade it.
+- Recalculate R:R yourself: (target - entry) / (entry - stop). Report this number.
+- Calculate target_move_pct: ((target - entry) / entry) * 100. Round to 1 decimal place.
+- Assign quality_tier using this exact logic:
+  - "PREMIUM"    if R:R >= 3.0 AND target_move_pct >= 10
+  - "STANDARD"   if R:R >= 2.5 AND target_move_pct >= 8
+  - "ACCEPTABLE" if R:R >= 2.5 AND target_move_pct >= 6
+  - "BELOW_BAR"  for anything else
+- Set meets_quality_bar: true if quality_tier is PREMIUM, STANDARD, or ACCEPTABLE. False if BELOW_BAR.
+- Set is_premium: true only if quality_tier is PREMIUM. False otherwise.
 
 ## Output format
 You must respond with ONLY a valid JSON object — no explanation, no markdown, no preamble, no text after the JSON.
@@ -48,12 +65,15 @@ For a trade recommendation:
   "action": "BUY",
   "entry_price": 185.50,
   "stop_loss": 181.00,
-  "target_price": 193.60,
-  "risk_reward_ratio": 1.80,
+  "target_price": 205.85,
+  "risk_reward_ratio": 4.38,
+  "target_move_pct": 11.0,
+  "quality_tier": "PREMIUM",
   "meets_quality_bar": true,
+  "is_premium": true,
   "timeframe": "5-7 days",
   "confidence": "HIGH",
-  "rationale": "Two to four sentences explaining the setup — what technical pattern triggered it, what the news catalyst is, and why this week is the right time.",
+  "rationale": "Two to four sentences explaining the setup. State which quality tier was reached and why.",
   "key_risks": ["Risk 1", "Risk 2"],
   "no_trade_reason": null
 }
@@ -67,6 +87,10 @@ For no trade:
   "stop_loss": null,
   "target_price": null,
   "risk_reward_ratio": null,
+  "target_move_pct": null,
+  "quality_tier": null,
+  "meets_quality_bar": null,
+  "is_premium": null,
   "timeframe": null,
   "confidence": null,
   "rationale": null,
@@ -77,7 +101,7 @@ For no trade:
 ## Confidence levels
 - HIGH: clear pattern, strong catalyst, obvious technical levels, high-conviction setup
 - MEDIUM: decent setup but one element is uncertain (e.g. weak catalyst, resistance nearby)
-- LOW: marginal setup — consider NOT outputting this and using NO_TRADE instead
+- LOW: marginal setup — consider whether BELOW_BAR is more honest
 
 ## Final instruction
 Review all candidates carefully. Think through each one. Then commit to your single best pick or NO_TRADE. Be disciplined — a mediocre trade forced through is worse than sitting out a week."""
@@ -193,11 +217,9 @@ def _extract_json(raw: str) -> dict:
 
 def _validate(result: dict) -> tuple[bool, str]:
     """
-    Validate a TRADE response against the hard risk rules.
-    Returns (is_valid, reason_if_invalid).
-    - Structurally broken trades (missing fields, bad prices, stop above entry) → hard reject (NO_TRADE).
-    - Sub-1.8 R:R → sets meets_quality_bar=False, passes through with warning in Telegram.
-    - NO_TRADE responses always pass.
+    Validate a TRADE response. Recalculates R:R, target_move_pct, quality_tier,
+    is_premium, and meets_quality_bar from raw prices — never trusts Claude's values.
+    Structurally broken trades hard-reject; quality issues pass through with flags.
     """
     if result.get("decision") == "NO_TRADE":
         return True, ""
@@ -228,25 +250,38 @@ def _validate(result: dict) -> tuple[bool, str]:
         if target >= entry:
             return False, f"SHORT target ({target}) must be below entry ({entry})"
 
-    # Recalculate R:R from the numbers — don't trust Claude's stated value
     risk = abs(entry - stop)
     reward = abs(target - entry)
     if risk == 0:
         return False, "Risk is zero (entry == stop)"
+
     actual_rr = round(reward / risk, 4)
+    target_move_pct = round((reward / entry) * 100, 1)
 
-    # Write the recalculated R:R back so downstream code uses the verified number
+    # Determine quality tier from recalculated numbers
+    if actual_rr >= 3.0 and target_move_pct >= 10:
+        quality_tier = "PREMIUM"
+    elif actual_rr >= config.MIN_RISK_REWARD and target_move_pct >= 8:
+        quality_tier = "STANDARD"
+    elif actual_rr >= config.MIN_RISK_REWARD and target_move_pct >= 6:
+        quality_tier = "ACCEPTABLE"
+    else:
+        quality_tier = "BELOW_BAR"
+
     result["risk_reward_ratio"] = round(actual_rr, 2)
+    result["target_move_pct"] = target_move_pct
+    result["quality_tier"] = quality_tier
+    result["is_premium"] = quality_tier == "PREMIUM"
+    result["meets_quality_bar"] = quality_tier != "BELOW_BAR"
 
-    # Sub-1.8 R:R is a quality flag, not a hard rejection — trade passes through with warning
-    if actual_rr < config.MIN_RISK_REWARD:
-        result["meets_quality_bar"] = False
+    if quality_tier == "BELOW_BAR":
         logger.warning(
-            "R:R %.4f is below minimum %.1f — flagging meets_quality_bar=False (not rejecting)",
-            actual_rr, config.MIN_RISK_REWARD,
+            "Quality BELOW_BAR: R:R=%.4f target_move=%.1f%% — flagging, not rejecting",
+            actual_rr, target_move_pct,
         )
     else:
-        result["meets_quality_bar"] = True
+        logger.info("Quality tier: %s | R:R=%.2f | target_move=%.1f%%",
+                    quality_tier, actual_rr, target_move_pct)
 
     return True, ""
 
@@ -260,7 +295,10 @@ def _no_trade(reason: str) -> dict:
         "stop_loss": None,
         "target_price": None,
         "risk_reward_ratio": None,
+        "target_move_pct": None,
+        "quality_tier": None,
         "meets_quality_bar": None,
+        "is_premium": None,
         "timeframe": None,
         "confidence": None,
         "rationale": None,
@@ -313,11 +351,12 @@ def analyze(candidates: list[dict]) -> dict:
 
     decision = result.get("decision", "NO_TRADE")
     logger.info(
-        "Analyst decision: %s | symbol=%s | R:R=%s | quality_bar=%s | confidence=%s",
+        "Analyst decision: %s | symbol=%s | R:R=%s | tier=%s | move=%s%% | confidence=%s",
         decision,
         result.get("symbol"),
         result.get("risk_reward_ratio"),
-        result.get("meets_quality_bar"),
+        result.get("quality_tier"),
+        result.get("target_move_pct"),
         result.get("confidence"),
     )
     return result
