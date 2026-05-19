@@ -37,9 +37,14 @@
   {# Win Rate #}
   <div class="stat-tile">
     <div class="stat-label">Win Rate</div>
-    {% if stats.win_rate is not none %}
-      <div class="stat-value mint">{{ stats.win_rate }}%</div>
-      <div class="stat-sub mint">▲ {{ stats.wins }} of {{ stats.completed }} trades</div>
+    {% if stats.completed > 0 %}
+      {% if stats.wins > 0 %}
+        <div class="stat-value mint">{{ stats.win_rate }}%</div>
+        <div class="stat-sub mint">▲ {{ stats.wins }} of {{ stats.completed }} trades</div>
+      {% else %}
+        <div class="stat-value red">{{ stats.win_rate }}%</div>
+        <div class="stat-sub red">▼ {{ stats.wins }} of {{ stats.completed }} trades</div>
+      {% endif %}
     {% else %}
       <div class="stat-value">—</div>
       <div class="stat-sub">no closed trades</div>
@@ -61,7 +66,11 @@
   <div class="stat-tile">
     <div class="stat-label">Best Week</div>
     {% if stats.best_week_pnl is not none %}
-      <div class="stat-value mint">+${{ "%.2f"|format(stats.best_week_pnl) }}</div>
+      {% if stats.best_week_pnl >= 0 %}
+        <div class="stat-value mint">+${{ "%.2f"|format(stats.best_week_pnl) }}</div>
+      {% else %}
+        <div class="stat-value red">-${{ "%.2f"|format(stats.best_week_pnl|abs) }}</div>
+      {% endif %}
       <div class="stat-sub">{{ stats.best_week_date }} · {{ stats.best_week_symbol }}</div>
     {% else %}
       <div class="stat-value">—</div>
@@ -72,8 +81,8 @@
   {# You vs Bot #}
   <div class="stat-tile">
     <div class="stat-label">You vs Bot</div>
-    {% if stats.you_vs_bot_delta is not none %}
-      {% if stats.you_vs_bot_delta >= 0 %}
+    {% if stats.you_vs_bot_delta is not none and stats.you_vs_bot_delta != 0 %}
+      {% if stats.you_vs_bot_delta > 0 %}
         <div class="stat-value mint">+${{ "%.2f"|format(stats.you_vs_bot_delta) }}</div>
       {% else %}
         <div class="stat-value red">-${{ "%.2f"|format(stats.you_vs_bot_delta|abs) }}</div>

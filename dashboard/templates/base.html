@@ -34,20 +34,20 @@
       <div class="statusbar-cell">
         <span class="statusbar-label">MTD</span>
         {% if stats.mtd_pct > 0 %}
-          <span class="statusbar-value mint mono">▲{{ "%.2f" | format(stats.mtd_pct) }}%</span>
+          <span class="mint mono" style="font-weight:600;">▲{{ "%.2f" | format(stats.mtd_pct) }}%</span>
         {% elif stats.mtd_pct < 0 %}
-          <span class="statusbar-value red mono">▼{{ "%.2f" | format(stats.mtd_pct | abs) }}%</span>
+          <span class="red mono" style="font-weight:600;">▼{{ "%.2f" | format(stats.mtd_pct | abs) }}%</span>
         {% else %}
-          <span class="statusbar-value muted">—</span>
+          <span class="muted" style="font-weight:600;">—</span>
         {% endif %}
       </div>
 
       <div class="statusbar-cell">
         <span class="statusbar-label">POS</span>
         {% if active %}
-          <span class="statusbar-value mint mono">{{ active.symbol }}</span>
+          <span class="mint mono" style="font-weight:600;">{{ active.symbol }}</span>
         {% else %}
-          <span class="statusbar-value muted">NO POSITION</span>
+          <span class="muted" style="font-weight:600;">NO POSITION</span>
         {% endif %}
       </div>
 
