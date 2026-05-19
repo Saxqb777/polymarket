@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SwingBot{% endblock %}</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/static/dashboard.css">
+
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <!-- ── Status bar ──────────────────────────────────────────────────────────── -->
+  <div class="statusbar">
+    <div class="statusbar-left">
+
+      <div class="statusbar-cell">
+        <span class="live-dot"></span>
+        <span>LIVE</span>
+      </div>
+
+      <div class="statusbar-cell">
+        <span class="statusbar-label">ACCT</span>
+        <span class="statusbar-value mono">${{ "%.2f" | format(stats.account_value) }}</span>
+      </div>
+
+      <div class="statusbar-cell">
+        <span class="statusbar-label">MTD</span>
+        {% if stats.mtd_pct > 0 %}
+          <span class="statusbar-value mint mono">▲{{ "%.2f" | format(stats.mtd_pct) }}%</span>
+        {% elif stats.mtd_pct < 0 %}
+          <span class="statusbar-value red mono">▼{{ "%.2f" | format(stats.mtd_pct | abs) }}%</span>
+        {% else %}
+          <span class="statusbar-value muted">—</span>
+        {% endif %}
+      </div>
+
+      <div class="statusbar-cell">
+        <span class="statusbar-label">POS</span>
+        {% if active %}
+          <span class="statusbar-value mint mono">{{ active.symbol }}</span>
+        {% else %}
+          <span class="statusbar-value muted">NO POSITION</span>
+        {% endif %}
+      </div>
+
+      <div class="statusbar-cell">
+        <span class="statusbar-label">NEXT SCAN</span>
+        <span class="statusbar-value dim">SUN 20:00 GULF · 2D 04H</span>
+      </div>
+
+    </div>
+    <div class="statusbar-right">{{ username }}</div>
+  </div>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <a href="/" class="brand">SWING<span class="brand-accent">BOT</span></a>
+    <nav class="nav">
+      <a href="/"         class="nav-link {% if request.url.path == '/' %}active{% endif %}">Overview</a>
+      <a href="/trades"   class="nav-link {% if request.url.path.startswith('/trades') %}active{% endif %}">Trades</a>
+      <a href="/insights" class="nav-link {% if request.url.path.startswith('/insights') %}active{% endif %}">Insights</a>
+      <a href="/bot"      class="nav-link {% if request.url.path.startswith('/bot') %}active{% endif %}">Bot</a>
+      <span class="nav-sep"></span>
+      <a href="/logout" class="nav-link logout">Logout</a>
+    </nav>
+  </header>
+
+  <!-- ── Page content ───────────────────────────────────────────────────────── -->
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <span>SwingBot v1.2 · 101 tickers · Railway US-West · Sonnet 4.6</span>
+    <span class="footer-right">Days since blow-up · <strong class="days-num mono">{{ days_since_blowup }}</strong></span>
+  </footer>
+
+  <!-- ── Scripts ────────────────────────────────────────────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  {% block scripts %}{% endblock %}
+
+</body>
+</html>
