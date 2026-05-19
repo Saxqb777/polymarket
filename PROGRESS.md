@@ -6,12 +6,21 @@
 
 ## 📍 Current Status
 
-**Phase:** Dashboard — Step 2 complete (HTTP Basic Auth)
-**Next step:** Dashboard Step 3 — database read layer (queries.py)
+**Phase:** Dashboard — Step 3 complete (database read layer)
+**Next step:** Dashboard Step 4 — base template + CSS (base.html + dashboard.css, Bloomberg Terminal aesthetic)
 
 ---
 
 ## 📝 Log
+
+### 2026-05-19 — Dashboard Step 3: Database read layer
+- `dashboard/migrations.py`: idempotent schema migrations; adds quality_tier, target_move_pct, is_premium, meets_quality_bar, taken, skip_reason etc. to runs; closed_method to trade_outcomes; runs at startup via FastAPI lifespan
+- `dashboard/queries.py`: all read helpers — account stats, active position, equity curve, trade list (paginated), trade detail, insights (tier/confidence/monthly breakdowns)
+- `dashboard/main.py`: wired migrations.run() via asynccontextmanager lifespan hook
+- `dashboard/auth.py`: removed temporary debug print added during auth bug investigation
+- `src/database.py`: log_run() now writes quality_tier, target_move_pct, is_premium, meets_quality_bar
+- `main.py`: passes those 4 quality fields from analyst result into run_data dict
+- `requirements.txt`: added jinja2>=3.1.0 (needed for Step 4 templates)
 
 ### 2026-05-15 — Dashboard Step 2: HTTP Basic Auth
 - `dashboard/auth.py`: HTTPBasic dependency, username="saaqib", password from DASHBOARD_PASSWORD env var
