@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from dashboard.auth import require_auth
 from dashboard import migrations, queries, commands
+from dashboard.queries import get_user_settings
 
 _HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(_HERE.parent))
@@ -225,3 +226,61 @@ async def post_unskip(run_id: int, request: Request,
     trade = commands.unskip_trade(run_id)
     return templates.TemplateResponse(request, "partials/action_panel.html",
                                       _trade_ctx(trade, run_id))
+
+
+# ── Edit-close HTMX endpoints ─────────────────────────────────────────────────
+
+@app.get("/trade/{run_id}/edit-close-form")
+async def edit_close_form(run_id: int, request: Request, _user: str = Depends(require_auth)):
+    trade = queries.get_trade_by_id(run_id)
+    if not trade:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "partials/edit_close_form.html",
+                                      {"trade": trade, "run_id": run_id})
+
+
+@app.post("/trade/{run_id}/edit-close")
+async def post_edit_close(run_id: int, request: Request,
+                          exit_price:  float = Form(...),
+                          pnl_dollars: float = Form(...),
+                          outcome:     str   = Form(...),
+                          notes:       str   = Form(""),
+                          _user: str = Depends(require_auth)):
+    trade = commands.edit_outcome(run_id, exit_price, pnl_dollars, outcome, notes or None)
+    return templates.TemplateResponse(request, "partials/action_panel.html",
+                                      _trade_ctx(trade, run_id))
+
+
+# ── Settings page ─────────────────────────────────────────────────────────────
+
+@app.get("/settings")
+async def settings_page(request: Request, _user: str = Depends(require_auth)):
+    settings = get_user_settings()
+    stats    = queries.get_account_stats()
+    active   = queries.get_active_position()
+    return templates.TemplateResponse(request, "settings.html", {
+        "settings":          settings,
+        "stats":             stats,
+        "active":            active,
+        "username":          "SAAQIB",
+        "days_since_blowup": stats["days_since_inception"],
+        "saved":             False,
+    })
+
+
+@app.post("/settings")
+async def post_settings(request: Request,
+                        starting_capital: float = Form(...),
+                        _user: str = Depends(require_auth)):
+    commands.update_settings(starting_capital)
+    settings = get_user_settings()
+    stats    = queries.get_account_stats()
+    active   = queries.get_active_position()
+    return templates.TemplateResponse(request, "settings.html", {
+        "settings":          settings,
+        "stats":             stats,
+        "active":            active,
+        "username":          "SAAQIB",
+        "days_since_blowup": stats["days_since_inception"],
+        "saved":             True,
+    })

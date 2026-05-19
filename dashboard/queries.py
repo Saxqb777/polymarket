@@ -34,12 +34,24 @@ def _fmt_tier(tier: Optional[str]) -> str:
 
 # ── Account-level stats ───────────────────────────────────────────────────────
 
+def get_user_settings() -> dict:
+    """Returns the single user_settings row, falling back to config defaults."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT starting_capital, updated_at FROM user_settings WHERE id = 1"
+        ).fetchone()
+    if row:
+        return {"starting_capital": row["starting_capital"], "updated_at": row["updated_at"]}
+    return {"starting_capital": config.ACCOUNT_CAPITAL, "updated_at": None}
+
+
 def get_account_stats() -> dict:
     """
     Everything the hero section and stats grid need.
     Returns sensible defaults (zeros, None) when the DB is empty.
     """
-    starting = config.ACCOUNT_CAPITAL
+    settings = get_user_settings()
+    starting = settings["starting_capital"]
 
     with _conn() as conn:
         # Completed outcomes
@@ -114,30 +126,50 @@ def get_account_stats() -> dict:
             except ValueError:
                 pass
 
-    account_value = starting + total_pnl
-    win_rate = (wins / completed * 100) if completed > 0 else None
-    mtd_pct  = (mtd_pnl / starting * 100) if starting > 0 else 0
-    pnl_pct  = (total_pnl / starting * 100) if starting > 0 else 0
+        # Open position cost basis (actual_entry × actual_shares, no outcome yet)
+        open_rows = conn.execute("""
+            SELECT r.actual_entry, r.actual_shares, r.symbol
+            FROM runs r
+            LEFT JOIN trade_outcomes to2 ON r.id = to2.run_id
+            WHERE r.decision = 'TRADE'
+              AND r.taken = 1
+              AND to2.id IS NULL
+              AND r.actual_entry IS NOT NULL
+              AND r.actual_shares IS NOT NULL
+            ORDER BY r.id DESC
+        """).fetchall()
+
+    open_cost   = sum((r["actual_entry"] * r["actual_shares"]) for r in open_rows)
+    open_symbol = open_rows[0]["symbol"] if open_rows else None
+
+    account_value   = starting + total_pnl
+    cash_position   = account_value - open_cost
+    win_rate        = (wins / completed * 100) if completed > 0 else None
+    mtd_pct         = (mtd_pnl / starting * 100) if starting > 0 else 0
+    pnl_pct         = (total_pnl / starting * 100) if starting > 0 else 0
     you_vs_bot_delta = (taken_pnl_row - total_pnl) if completed > 0 else None
 
     return {
-        "account_value":      round(account_value, 2),
-        "starting_capital":   starting,
-        "total_pnl":          round(total_pnl, 2),
-        "pnl_pct":            round(pnl_pct, 2),
-        "mtd_pnl":            round(mtd_pnl, 2),
-        "mtd_pct":            round(mtd_pct, 2),
-        "total_trades":       total_trades,
-        "wins":               wins,
-        "losses":             losses,
-        "completed":          completed,
-        "win_rate":           round(win_rate, 1) if win_rate is not None else None,
-        "avg_rr_recommended": round(rr_row, 2) if rr_row else None,
-        "best_week_pnl":      round(best_week["week_pnl"], 2) if best_week else None,
-        "best_week_symbol":   best_week["symbol"] if best_week else None,
-        "best_week_date":     best_week["week_start"] if best_week else None,
-        "you_vs_bot_delta":   round(you_vs_bot_delta, 2) if you_vs_bot_delta is not None else None,
-        "skipped_winners":    skipped_winners,
+        "account_value":        round(account_value, 2),
+        "starting_capital":     starting,
+        "total_pnl":            round(total_pnl, 2),
+        "pnl_pct":              round(pnl_pct, 2),
+        "mtd_pnl":              round(mtd_pnl, 2),
+        "mtd_pct":              round(mtd_pct, 2),
+        "cash_position":        round(cash_position, 2),
+        "open_position_value":  round(open_cost, 2),
+        "open_position_symbol": open_symbol,
+        "total_trades":         total_trades,
+        "wins":                 wins,
+        "losses":               losses,
+        "completed":            completed,
+        "win_rate":             round(win_rate, 1) if win_rate is not None else None,
+        "avg_rr_recommended":   round(rr_row, 2) if rr_row else None,
+        "best_week_pnl":        round(best_week["week_pnl"], 2) if best_week else None,
+        "best_week_symbol":     best_week["symbol"] if best_week else None,
+        "best_week_date":       best_week["week_start"] if best_week else None,
+        "you_vs_bot_delta":     round(you_vs_bot_delta, 2) if you_vs_bot_delta is not None else None,
+        "skipped_winners":      skipped_winners,
         "days_since_inception": days_since,
     }
 
@@ -207,7 +239,7 @@ def get_equity_curve(days: int = 30) -> list[dict]:
             WHERE outcome IN ('WIN', 'LOSS') AND exit_date < ?
         """, (cutoff,)).fetchone()[0]
 
-    running = config.ACCOUNT_CAPITAL + (pre_pnl_row or 0)
+    running = get_user_settings()["starting_capital"] + (pre_pnl_row or 0)
     curve = []
     for i in range(days + 1):
         d = (date.today() - timedelta(days=days - i)).isoformat()

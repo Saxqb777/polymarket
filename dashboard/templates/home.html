@@ -27,6 +27,16 @@
       <span class="hero-since">since inception · {{ stats.days_since_inception }} days</span>
     {% endif %}
   </div>
+  {% if stats.completed > 0 or stats.open_position_symbol %}
+  <div class="hero-breakdown">
+    Cash ${{ "%.2f"|format(stats.cash_position) }}
+    {% if stats.open_position_symbol %}
+      · Open ${{ "%.2f"|format(stats.open_position_value) }} in {{ stats.open_position_symbol }}
+    {% else %}
+      · No open position
+    {% endif %}
+  </div>
+  {% endif %}
 </section>
 
 {# ══════════════════════════════════════════════════════════════════════════════

@@ -326,6 +326,28 @@ a {
   color: var(--text-dim);
 }
 
+.hero-breakdown {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 10px;
+  letter-spacing: 0.02em;
+}
+
+.nav-link.settings {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.nav-link.settings:hover {
+  color: var(--text);
+  background: var(--bg-elev);
+}
+
+.nav-link.settings.active {
+  color: var(--text);
+}
+
 /* ── Stats grid ──────────────────────────────────────────────────────────────── */
 .stats-grid {
   display: grid;

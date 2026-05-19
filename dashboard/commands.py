@@ -98,3 +98,35 @@ def unskip_trade(run_id: int) -> Optional[dict]:
             (run_id,),
         )
     return _get_trade(run_id)
+
+
+def edit_outcome(run_id: int, exit_price: float, pnl_dollars: float,
+                 outcome: str, notes: Optional[str] = None) -> Optional[dict]:
+    """Correct an already-closed trade's exit price and P&L."""
+    trade = _get_trade(run_id)
+    if not trade:
+        return None
+
+    entry  = trade.get("actual_entry") or trade.get("entry_price") or 0.0
+    shares = trade.get("actual_shares") or 0.0
+    pnl_pct = round(pnl_dollars / (entry * shares) * 100, 2) if entry and shares else 0.0
+
+    with _conn() as conn:
+        conn.execute("""
+            UPDATE trade_outcomes
+            SET exit_price = ?, pnl_dollars = ?, pnl_pct = ?, outcome = ?, notes = ?
+            WHERE run_id = ?
+        """, (exit_price, round(pnl_dollars, 2), pnl_pct, outcome, notes or None, run_id))
+    return _get_trade(run_id)
+
+
+def update_settings(starting_capital: float) -> None:
+    """Upsert the single user_settings row."""
+    with _conn() as conn:
+        conn.execute("""
+            INSERT INTO user_settings (id, starting_capital, updated_at)
+            VALUES (1, ?, datetime('now'))
+            ON CONFLICT(id) DO UPDATE SET
+                starting_capital = excluded.starting_capital,
+                updated_at       = excluded.updated_at
+        """, (starting_capital,))

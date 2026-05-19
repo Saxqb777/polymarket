@@ -97,11 +97,17 @@
   <span class="muted">NOTES ·</span> {{ trade.outcome_notes }}
 </p>
 {% endif %}
-<button class="action-button-ghost"
-        hx-post="/trade/{{ run_id }}/reopen"
-        hx-target="#action-panel"
-        hx-swap="innerHTML"
-        hx-confirm="Reopen this trade? This will delete the outcome record.">↩ REOPEN</button>
+<div class="action-buttons">
+  <button class="action-button-ghost"
+          hx-get="/trade/{{ run_id }}/edit-close-form"
+          hx-target="#action-panel"
+          hx-swap="innerHTML">✎ Edit close</button>
+  <button class="action-button-ghost"
+          hx-post="/trade/{{ run_id }}/reopen"
+          hx-target="#action-panel"
+          hx-swap="innerHTML"
+          hx-confirm="Reopen this trade? This will delete the outcome record.">↩ REOPEN</button>
+</div>
 
 {% elif trade_state == 'skipped' %}
 {# ── State D: skipped ───────────────────────────────────────────────────────── #}

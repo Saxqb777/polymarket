@@ -58,6 +58,19 @@ def run(db_path: str = config.DB_PATH) -> None:
                 conn.execute(f"ALTER TABLE trade_outcomes ADD COLUMN {col} {definition}")
                 print(f"  migration: trade_outcomes.{col} added")
 
+        # ── user_settings table ───────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id               INTEGER PRIMARY KEY CHECK (id = 1),
+                starting_capital REAL    NOT NULL DEFAULT 250.0,
+                updated_at       TEXT    NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT OR IGNORE INTO user_settings (id, starting_capital, updated_at)
+            VALUES (1, ?, datetime('now'))
+        """, (config.ACCOUNT_CAPITAL,))
+
         conn.commit()
 
     finally:
