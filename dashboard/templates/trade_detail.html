@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ trade.symbol or '—' }} · SwingBot{% endblock %}
+
+{% block content %}
+<div class="trade-detail-page">
+
+  {# ── Back nav ──────────────────────────────────────────────────────────────── #}
+  <div style="margin-bottom: 24px;">
+    <a href="/" class="back-link">← Overview</a>
+  </div>
+
+  {# ── Ticker header ─────────────────────────────────────────────────────────── #}
+  <div class="td-header">
+    <div>
+      <div class="td-symbol">{{ trade.symbol or '—' }}</div>
+      <div class="td-company">
+        <span>{{ company_name }}</span>
+        {% if trade.quality_tier == 'PREMIUM' %}
+          <span class="tier-badge tier-prem">★ Prem</span>
+        {% elif trade.quality_tier == 'STANDARD' %}
+          <span class="tier-badge tier-stand">Stand</span>
+        {% elif trade.quality_tier == 'ACCEPTABLE' %}
+          <span class="tier-badge tier-accept">Accept</span>
+        {% elif trade.quality_tier == 'BELOW_BAR' %}
+          <span class="tier-badge tier-below">Below</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="td-meta">
+      <div>{{ trade.run_date }}</div>
+      <div class="muted">ID #{{ trade.id }}</div>
+    </div>
+  </div>
+
+  {# ── Bot's suggested levels ────────────────────────────────────────────────── #}
+  <div class="section">
+    <div class="section-header"><span>Bot's Pick</span></div>
+    <div class="td-cells">
+      <div class="td-cell">
+        <div class="td-cell-label">Entry</div>
+        <div class="td-cell-value">{% if trade.entry_price %}${{ "%.2f"|format(trade.entry_price) }}{% else %}—{% endif %}</div>
+      </div>
+      <div class="td-cell">
+        <div class="td-cell-label">Stop Loss</div>
+        <div class="td-cell-value red">{% if trade.stop_loss %}${{ "%.2f"|format(trade.stop_loss) }}{% else %}—{% endif %}</div>
+      </div>
+      <div class="td-cell">
+        <div class="td-cell-label">Target</div>
+        <div class="td-cell-value mint">{% if trade.target_price %}${{ "%.2f"|format(trade.target_price) }}{% else %}—{% endif %}</div>
+      </div>
+      <div class="td-cell">
+        <div class="td-cell-label">R:R</div>
+        <div class="td-cell-value">{{ "%.2f"|format(trade.risk_reward) if trade.risk_reward else "—" }}</div>
+      </div>
+      <div class="td-cell">
+        <div class="td-cell-label">Confidence</div>
+        <div class="td-cell-value">{{ trade.confidence or "—" }}</div>
+      </div>
+      <div class="td-cell">
+        <div class="td-cell-label">Target Move</div>
+        <div class="td-cell-value">{{ "%.1f"|format(trade.target_move_pct) ~ "%" if trade.target_move_pct else "—" }}</div>
+      </div>
+      <div class="td-cell">
+        <div class="td-cell-label">Quality Tier</div>
+        <div class="td-cell-value" style="font-size:14px;">{{ trade.quality_tier or "—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Full bot reasoning ────────────────────────────────────────────────────── #}
+  {% if trade.rationale %}
+  <div class="section">
+    <div class="section-header"><span>Bot Reasoning</span></div>
+    <div class="block">
+      <p class="td-rationale">{{ trade.rationale }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── No trade reason ───────────────────────────────────────────────────────── #}
+  {% if trade.no_trade_reason %}
+  <div class="section">
+    <div class="section-header"><span>No Trade · Reason</span></div>
+    <div class="block">
+      <p class="td-rationale dim">{{ trade.no_trade_reason }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Action panel (TRADE decisions only) ──────────────────────────────────── #}
+  {% if trade.decision == 'TRADE' %}
+  <div class="section">
+    <div class="section-header">
+      <span>Your Action</span>
+      {% if trade_state == 'open' %}<span class="amber">● OPEN</span>
+      {% elif trade_state == 'closed' %}<span class="dim">● CLOSED</span>
+      {% elif trade_state == 'skipped' %}<span class="muted">● SKIPPED</span>
+      {% else %}<span class="muted">● PENDING</span>
+      {% endif %}
+    </div>
+    <div id="action-panel" class="block">
+      {% include "partials/action_panel.html" %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

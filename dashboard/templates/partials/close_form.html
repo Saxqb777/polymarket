@@ -1,0 +1,39 @@
+<form hx-post="/trade/{{ run_id }}/close"
+      hx-target="#action-panel"
+      hx-swap="innerHTML"
+      class="trade-form">
+  <div class="form-grid">
+    <div class="form-field">
+      <label class="form-label" for="exit_price">Exit Price ($)</label>
+      <input id="exit_price" type="number" name="exit_price" step="0.01" min="0.01"
+             class="form-input" required autofocus>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="outcome">Outcome</label>
+      <select id="outcome" name="outcome" class="form-input form-select">
+        <option value="WIN">WIN — hit target</option>
+        <option value="LOSS">LOSS — stopped out</option>
+        <option value="MANUAL">MANUAL — closed early</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="closed_method">Closed by</label>
+      <select id="closed_method" name="closed_method" class="form-input form-select">
+        <option value="target">Target hit</option>
+        <option value="stop">Stop hit</option>
+        <option value="manual">Manual close</option>
+        <option value="eod">End of day</option>
+      </select>
+    </div>
+    <div class="form-field form-field-wide">
+      <label class="form-label" for="close_notes">Notes (optional)</label>
+      <input id="close_notes" type="text" name="notes"
+             placeholder="e.g. News came out, took profits early"
+             class="form-input">
+    </div>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="action-button-danger">CLOSE TRADE</button>
+    <a href="/trade/{{ run_id }}" class="form-cancel">Cancel</a>
+  </div>
+</form>

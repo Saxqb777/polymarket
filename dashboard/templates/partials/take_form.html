@@ -1,0 +1,30 @@
+<form hx-post="/trade/{{ run_id }}/take"
+      hx-target="#action-panel"
+      hx-swap="innerHTML"
+      class="trade-form">
+  <div class="form-grid">
+    <div class="form-field">
+      <label class="form-label" for="actual_entry">Actual Entry Price ($)</label>
+      <input id="actual_entry" type="number" name="actual_entry" step="0.01" min="0.01"
+             value="{{ '%.2f'|format(trade.actual_entry) if trade.actual_entry else '%.2f'|format(trade.entry_price) if trade.entry_price else '' }}"
+             class="form-input" required autofocus>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="actual_shares">Shares Bought</label>
+      <input id="actual_shares" type="number" name="actual_shares" step="0.01" min="0.01"
+             value="{{ '%.2f'|format(trade.actual_shares) if trade.actual_shares else '' }}"
+             class="form-input" required>
+    </div>
+    <div class="form-field form-field-wide">
+      <label class="form-label" for="notes">Notes (optional)</label>
+      <input id="notes" type="text" name="notes"
+             value="{{ trade.my_notes or '' }}"
+             placeholder="e.g. Entered at open, spread was tight"
+             class="form-input">
+    </div>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="action-button-primary">CONFIRM ENTRY</button>
+    <a href="/trade/{{ run_id }}" class="form-cancel">Cancel</a>
+  </div>
+</form>

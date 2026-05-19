@@ -1,0 +1,18 @@
+<form hx-post="/trade/{{ run_id }}/skip"
+      hx-target="#action-panel"
+      hx-swap="innerHTML"
+      class="trade-form">
+  <div class="form-grid">
+    <div class="form-field form-field-wide">
+      <label class="form-label" for="skip_reason">Skip reason (optional)</label>
+      <input id="skip_reason" type="text" name="skip_reason"
+             value="{{ trade.skip_reason or '' }}"
+             placeholder="e.g. Already in a trade, didn't like the news"
+             class="form-input" autofocus>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="action-button-secondary">CONFIRM SKIP</button>
+    <a href="/trade/{{ run_id }}" class="form-cancel">Cancel</a>
+  </div>
+</form>

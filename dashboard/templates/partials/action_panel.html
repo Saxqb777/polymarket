@@ -1,0 +1,122 @@
+{% if trade_state == 'pending' %}
+{# ── State A: no action yet ─────────────────────────────────────────────────── #}
+<div class="action-buttons">
+  <button class="action-button-primary"
+          hx-get="/trade/{{ run_id }}/take-form"
+          hx-target="#action-panel"
+          hx-swap="innerHTML">★ I TOOK IT</button>
+  <button class="action-button-secondary"
+          hx-get="/trade/{{ run_id }}/skip-form"
+          hx-target="#action-panel"
+          hx-swap="innerHTML">⏭ SKIPPED</button>
+</div>
+
+{% elif trade_state == 'open' %}
+{# ── State B: trade is open ─────────────────────────────────────────────────── #}
+<div class="td-cells" style="margin-bottom: 20px;">
+  <div class="td-cell">
+    <div class="td-cell-label">Your Entry</div>
+    <div class="td-cell-value mint">{% if trade.actual_entry %}${{ "%.2f"|format(trade.actual_entry) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Shares</div>
+    <div class="td-cell-value">{% if trade.actual_shares %}{{ "%.2f"|format(trade.actual_shares) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Last</div>
+    <div class="td-cell-value muted">—</div>
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Live P&L</div>
+    <div class="td-cell-value muted">—</div>
+  </div>
+</div>
+<div class="action-buttons">
+  <button class="action-button-danger"
+          hx-get="/trade/{{ run_id }}/close-form"
+          hx-target="#action-panel"
+          hx-swap="innerHTML">✕ CLOSE TRADE</button>
+  <button class="action-button-ghost"
+          hx-get="/trade/{{ run_id }}/take-form"
+          hx-target="#action-panel"
+          hx-swap="innerHTML">Edit entry</button>
+</div>
+
+{% elif trade_state == 'closed' %}
+{# ── State C: trade closed ──────────────────────────────────────────────────── #}
+<div class="td-cells" style="margin-bottom: 20px;">
+  <div class="td-cell">
+    <div class="td-cell-label">Your Entry</div>
+    <div class="td-cell-value">{% if trade.actual_entry %}${{ "%.2f"|format(trade.actual_entry) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Exit</div>
+    <div class="td-cell-value">{% if trade.exit_price %}${{ "%.2f"|format(trade.exit_price) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">P&L $</div>
+    {% if trade.pnl_dollars is not none %}
+      <div class="td-cell-value {% if trade.pnl_dollars >= 0 %}mint{% else %}red{% endif %}">
+        {% if trade.pnl_dollars >= 0 %}+{% else %}-{% endif %}${{ "%.2f"|format(trade.pnl_dollars|abs) }}
+      </div>
+    {% else %}
+      <div class="td-cell-value muted">—</div>
+    {% endif %}
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">P&L %</div>
+    {% if trade.pnl_pct is not none %}
+      <div class="td-cell-value {% if trade.pnl_pct >= 0 %}mint{% else %}red{% endif %}">
+        {% if trade.pnl_pct >= 0 %}+{% endif %}{{ "%.2f"|format(trade.pnl_pct) }}%
+      </div>
+    {% else %}
+      <div class="td-cell-value muted">—</div>
+    {% endif %}
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Outcome</div>
+    {% if trade.outcome == 'WIN' %}
+      <div class="td-cell-value mint">WIN</div>
+    {% elif trade.outcome == 'LOSS' %}
+      <div class="td-cell-value red">LOSS</div>
+    {% else %}
+      <div class="td-cell-value dim">{{ trade.outcome or "—" }}</div>
+    {% endif %}
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Closed</div>
+    <div class="td-cell-value dim" style="font-size:14px;">{{ trade.exit_date or "—" }}</div>
+  </div>
+  <div class="td-cell">
+    <div class="td-cell-label">Method</div>
+    <div class="td-cell-value dim" style="font-size:14px;">{{ trade.closed_method or "—" }}</div>
+  </div>
+</div>
+{% if trade.outcome_notes %}
+<p class="mono dim" style="font-size:12px; margin-bottom:16px;">
+  <span class="muted">NOTES ·</span> {{ trade.outcome_notes }}
+</p>
+{% endif %}
+<button class="action-button-ghost"
+        hx-post="/trade/{{ run_id }}/reopen"
+        hx-target="#action-panel"
+        hx-swap="innerHTML"
+        hx-confirm="Reopen this trade? This will delete the outcome record.">↩ REOPEN</button>
+
+{% elif trade_state == 'skipped' %}
+{# ── State D: skipped ───────────────────────────────────────────────────────── #}
+{% if trade.skip_reason %}
+<p class="mono dim" style="font-size:13px; margin-bottom:16px;">
+  <span class="muted">REASON ·</span> {{ trade.skip_reason }}
+</p>
+{% else %}
+<p class="mono muted" style="font-size:12px; margin-bottom:16px; letter-spacing:0.04em;">
+  NO SKIP REASON RECORDED.
+</p>
+{% endif %}
+<button class="action-button-ghost"
+        hx-post="/trade/{{ run_id }}/unskip"
+        hx-target="#action-panel"
+        hx-swap="innerHTML">↩ UNDO SKIP</button>
+
+{% endif %}
