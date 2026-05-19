@@ -100,6 +100,30 @@ async def home(request: Request, _user: str = Depends(require_auth)):
     })
 
 
+# ── Stub pages (future steps) ─────────────────────────────────────────────────
+
+def _stub_ctx(request: Request) -> dict:
+    stats  = queries.get_account_stats()
+    active = queries.get_active_position()
+    return {"stats": stats, "active": active, "username": "SAAQIB",
+            "days_since_blowup": stats["days_since_inception"]}
+
+
+@app.get("/trades")
+async def trades_page(request: Request, _user: str = Depends(require_auth)):
+    return templates.TemplateResponse(request, "trades.html", _stub_ctx(request))
+
+
+@app.get("/insights")
+async def insights_page(request: Request, _user: str = Depends(require_auth)):
+    return templates.TemplateResponse(request, "insights.html", _stub_ctx(request))
+
+
+@app.get("/bot")
+async def bot_page(request: Request, _user: str = Depends(require_auth)):
+    return templates.TemplateResponse(request, "bot.html", _stub_ctx(request))
+
+
 # ── Trade detail ──────────────────────────────────────────────────────────────
 
 @app.get("/trade/{run_id}")

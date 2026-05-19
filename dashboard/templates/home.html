@@ -124,20 +124,22 @@
         <div class="pos-cells">
           {# Row 1 #}
           <div class="pos-cell">
-            <div class="pos-cell-label">Entry</div>
-            <div class="pos-cell-value">
-              {% if active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
+            <div class="pos-cell-label">{% if active.actual_entry %}Your Fill{% else %}Entry{% endif %}</div>
+            <div class="pos-cell-value {% if active.actual_entry %}mint{% endif %}">
+              {% if active.actual_entry %}${{ "%.2f"|format(active.actual_entry) }}{% elif active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
             </div>
           </div>
           <div class="pos-cell">
             <div class="pos-cell-label">Last</div>
             <div class="pos-cell-value dim">
-              {% if active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
+              {% if active.actual_entry %}${{ "%.2f"|format(active.actual_entry) }}{% elif active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
             </div>
           </div>
           <div class="pos-cell">
-            <div class="pos-cell-label">P&L</div>
-            <div class="pos-cell-value muted">—</div>
+            <div class="pos-cell-label">{% if active.actual_shares %}Shares{% else %}P&L{% endif %}</div>
+            <div class="pos-cell-value {% if active.actual_shares %}{% else %}muted{% endif %}">
+              {% if active.actual_shares %}{{ "%.2f"|format(active.actual_shares) }}{% else %}—{% endif %}
+            </div>
           </div>
           {# Row 2 #}
           <div class="pos-cell">
