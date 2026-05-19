@@ -8,6 +8,7 @@ Environment variables (add to .env):
     DASHBOARD_PASSWORD=yourpassword   (required — no default)
 """
 import pathlib
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -19,6 +20,8 @@ from dashboard.auth import require_auth
 from dashboard import migrations, queries
 
 _HERE = pathlib.Path(__file__).parent
+sys.path.insert(0, str(_HERE.parent))
+import config as _config
 
 
 @asynccontextmanager
@@ -59,11 +62,20 @@ async def logout():
 
 @app.get("/")
 async def home(request: Request, _user: str = Depends(require_auth)):
-    stats = queries.get_account_stats()
-    active = queries.get_active_position()
+    stats        = queries.get_account_stats()
+    active       = queries.get_active_position()
+    equity_curve = queries.get_equity_curve(30)
+    recent_trades = queries.get_recent_trades(10)
+    active_company = (
+        _config.SYMBOL_TO_COMPANY.get(active["symbol"], active["symbol"])
+        if active else None
+    )
     return templates.TemplateResponse(request, "home.html", {
-        "stats":            stats,
-        "active":           active,
-        "username":         "SAAQIB",
+        "stats":             stats,
+        "active":            active,
+        "active_company":    active_company,
+        "equity_curve":      equity_curve,
+        "recent_trades":     recent_trades,
+        "username":          "SAAQIB",
         "days_since_blowup": stats["days_since_inception"],
     })

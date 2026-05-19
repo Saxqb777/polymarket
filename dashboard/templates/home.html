@@ -2,7 +2,391 @@
 {% block title %}Overview · SwingBot{% endblock %}
 
 {% block content %}
-<p class="dim mono" style="font-size: 12px; letter-spacing: 0.05em;">
-  STEP 4 — SHELL READY. HERO + STATS + ACTIVE POSITION + EQUITY CURVE + TRADE LOG COMING IN STEP 5.
-</p>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   1. HERO
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section class="hero">
+  <div class="hero-label">Account Value · USD</div>
+  <div class="hero-number">
+    <span class="hero-dollar">$</span>
+    <span class="hero-amount">{{ "{:,.2f}".format(stats.account_value) }}</span>
+  </div>
+  <div class="hero-delta">
+    {% if stats.pnl_pct == 0 %}
+      <span class="muted mono" style="font-size:16px;">▬ FLAT</span>
+    {% elif stats.pnl_pct > 0 %}
+      <span class="mint">▲</span>
+      <span class="mint mono">+${{ "%.2f"|format(stats.total_pnl) }}</span>
+      <span class="delta-pill delta-pill-mint">+{{ "%.2f"|format(stats.pnl_pct) }}%</span>
+      <span class="hero-since">since inception · {{ stats.days_since_inception }} days</span>
+    {% else %}
+      <span class="red">▼</span>
+      <span class="red mono">-${{ "%.2f"|format(stats.total_pnl|abs) }}</span>
+      <span class="delta-pill delta-pill-red">{{ "%.2f"|format(stats.pnl_pct) }}%</span>
+      <span class="hero-since">since inception · {{ stats.days_since_inception }} days</span>
+    {% endif %}
+  </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   2. STATS GRID
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="stats-grid section">
+
+  {# Win Rate #}
+  <div class="stat-tile">
+    <div class="stat-label">Win Rate</div>
+    {% if stats.win_rate is not none %}
+      <div class="stat-value mint">{{ stats.win_rate }}%</div>
+      <div class="stat-sub mint">▲ {{ stats.wins }} of {{ stats.completed }} trades</div>
+    {% else %}
+      <div class="stat-value">—</div>
+      <div class="stat-sub">no closed trades</div>
+    {% endif %}
+  </div>
+
+  {# Avg R:R #}
+  <div class="stat-tile">
+    <div class="stat-label">Avg R:R Hit</div>
+    {% if stats.avg_rr_recommended %}
+      <div class="stat-value">{{ "%.2f"|format(stats.avg_rr_recommended) }}</div>
+    {% else %}
+      <div class="stat-value">—</div>
+    {% endif %}
+    <div class="stat-sub">promised</div>
+  </div>
+
+  {# Best Week #}
+  <div class="stat-tile">
+    <div class="stat-label">Best Week</div>
+    {% if stats.best_week_pnl is not none %}
+      <div class="stat-value mint">+${{ "%.2f"|format(stats.best_week_pnl) }}</div>
+      <div class="stat-sub">{{ stats.best_week_date }} · {{ stats.best_week_symbol }}</div>
+    {% else %}
+      <div class="stat-value">—</div>
+      <div class="stat-sub">no data yet</div>
+    {% endif %}
+  </div>
+
+  {# You vs Bot #}
+  <div class="stat-tile">
+    <div class="stat-label">You vs Bot</div>
+    {% if stats.you_vs_bot_delta is not none %}
+      {% if stats.you_vs_bot_delta >= 0 %}
+        <div class="stat-value mint">+${{ "%.2f"|format(stats.you_vs_bot_delta) }}</div>
+      {% else %}
+        <div class="stat-value red">-${{ "%.2f"|format(stats.you_vs_bot_delta|abs) }}</div>
+      {% endif %}
+      <div class="stat-sub">{{ stats.skipped_winners }} winners skipped</div>
+    {% else %}
+      <div class="stat-value">—</div>
+      <div class="stat-sub">no closed trades</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   3. ACTIVE POSITION  (hidden when no open trade)
+   ══════════════════════════════════════════════════════════════════════════════ #}
+{% if active %}
+<div class="section">
+  <div class="section-header">
+    <span>Active Position</span>
+    <span>Day {{ active.days_held }} of 5–7 · Live since {{ active.run_date }}</span>
+  </div>
+  <div class="active-card">
+    <div class="pos-grid">
+
+      {# ── Left: symbol + price cells ───────────────────────────────────────── #}
+      <div>
+        <div class="pos-symbol">{{ active.symbol }}</div>
+        <div class="pos-subtitle">
+          {{ active_company }}
+          ·
+          {% if active.quality_tier == 'PREMIUM' %}★ Premium
+          {% elif active.quality_tier == 'STANDARD' %}Standard tier
+          {% elif active.quality_tier == 'ACCEPTABLE' %}Acceptable tier
+          {% elif active.quality_tier == 'BELOW_BAR' %}Below bar
+          {% else %}Standard tier
+          {% endif %}
+        </div>
+        <div class="pos-cells">
+          {# Row 1 #}
+          <div class="pos-cell">
+            <div class="pos-cell-label">Entry</div>
+            <div class="pos-cell-value">
+              {% if active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="pos-cell">
+            <div class="pos-cell-label">Last</div>
+            <div class="pos-cell-value dim">
+              {% if active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="pos-cell">
+            <div class="pos-cell-label">P&L</div>
+            <div class="pos-cell-value muted">—</div>
+          </div>
+          {# Row 2 #}
+          <div class="pos-cell">
+            <div class="pos-cell-label">Stop</div>
+            <div class="pos-cell-value red">
+              {% if active.stop_loss %}${{ "%.2f"|format(active.stop_loss) }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="pos-cell">
+            <div class="pos-cell-label">Target</div>
+            <div class="pos-cell-value mint">
+              {% if active.target_price %}${{ "%.2f"|format(active.target_price) }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="pos-cell">
+            <div class="pos-cell-label">R:R</div>
+            <div class="pos-cell-value">
+              {{ "%.2f"|format(active.risk_reward) if active.risk_reward else "—" }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Right: progress rail + thesis ────────────────────────────────────── #}
+      <div>
+        <div class="progress-section-label">Progress to Target</div>
+        <div class="progress-track">
+          <div class="progress-stop-tick"></div>
+          <div class="progress-target-tick"></div>
+          <div class="progress-indicator" style="left: 50%"></div>
+        </div>
+        <div class="progress-labels">
+          <span>Stop · {% if active.stop_loss %}${{ "%.2f"|format(active.stop_loss) }}{% else %}—{% endif %}</span>
+          <span>Target · {% if active.target_price %}${{ "%.2f"|format(active.target_price) }}{% else %}—{% endif %}</span>
+        </div>
+        <div class="pos-thesis">
+          <div>
+            <span class="pos-thesis-label">THESIS ·</span>
+            {{ active.rationale[:120] if active.rationale else "—" }}{% if active.rationale and active.rationale|length > 120 %}…{% endif %}
+          </div>
+          <div>
+            <span class="pos-thesis-label">WATCH ·</span>
+            Manual exit at any point. Stop and target non-negotiable.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   4. EQUITY CURVE
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Equity Curve · 30 Days</span>
+    <span>
+      {% if stats.total_pnl >= 0 %}
+        <span class="mint">+${{ "%.2f"|format(stats.total_pnl) }}</span>
+      {% else %}
+        <span class="red">-${{ "%.2f"|format(stats.total_pnl|abs) }}</span>
+      {% endif %}
+      <span class="muted"> · {% if stats.pnl_pct >= 0 %}+{% endif %}{{ "%.2f"|format(stats.pnl_pct) }}%</span>
+    </span>
+  </div>
+  <div class="block">
+    <div class="chart-container">
+      <canvas id="equity-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   5. TRADE LOG
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Trade Log</span>
+    <span>
+      {{ recent_trades|length }} trades
+      · {{ stats.wins }}W {{ stats.losses }}L
+      · <a href="/trades" class="dim" style="text-decoration:underline;text-underline-offset:2px;">view all →</a>
+    </span>
+  </div>
+  <div style="border:1px solid var(--border); overflow:hidden;">
+    <table class="trade-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Tier</th>
+          <th>Ticker</th>
+          <th>Entry</th>
+          <th>Stop</th>
+          <th>Target</th>
+          <th>R:R</th>
+          <th class="th-right">Status</th>
+          <th class="th-right">P&L</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in recent_trades %}
+        <tr onclick="window.location='/trades/{{ t.id }}'">
+
+          <td class="td-date">{{ t.run_date }}</td>
+
+          <td>
+            {% if t.quality_tier == 'PREMIUM' %}
+              <span class="tier-badge tier-prem">★ Prem</span>
+            {% elif t.quality_tier == 'STANDARD' %}
+              <span class="tier-badge tier-stand">Stand</span>
+            {% elif t.quality_tier == 'ACCEPTABLE' %}
+              <span class="tier-badge tier-accept">Accept</span>
+            {% elif t.quality_tier == 'BELOW_BAR' %}
+              <span class="tier-badge tier-below">Below</span>
+            {% else %}
+              <span class="muted" style="font-size:12px;">—</span>
+            {% endif %}
+          </td>
+
+          <td class="td-ticker">{{ t.symbol or "—" }}</td>
+
+          <td class="td-mono">
+            {% if t.entry_price %}${{ "%.2f"|format(t.entry_price) }}{% else %}—{% endif %}
+          </td>
+          <td class="td-mono td-dim">
+            {% if t.stop_loss %}${{ "%.2f"|format(t.stop_loss) }}{% else %}—{% endif %}
+          </td>
+          <td class="td-mono td-dim">
+            {% if t.target_price %}${{ "%.2f"|format(t.target_price) }}{% else %}—{% endif %}
+          </td>
+          <td class="td-mono">
+            {{ "%.2f"|format(t.risk_reward) if t.risk_reward else "—" }}
+          </td>
+
+          <td class="td-right">
+            <div class="status-cell" style="justify-content:flex-end;">
+              {% if t.status == 'open' %}
+                <span class="dot dot-open"></span>
+                <span class="mono amber" style="font-size:11px;">Open</span>
+              {% elif t.status == 'target' %}
+                <span class="dot dot-target"></span>
+                <span class="mono mint" style="font-size:11px;">Target</span>
+              {% elif t.status == 'stopped' %}
+                <span class="dot dot-stop"></span>
+                <span class="mono red" style="font-size:11px;">Stop</span>
+              {% elif t.status == 'skipped' %}
+                <span class="dot dot-muted"></span>
+                <span class="mono muted" style="font-size:11px;">Skipped</span>
+              {% elif t.status == 'no_trade' %}
+                <span class="muted" style="font-size:11px;">No trade</span>
+              {% else %}
+                <span class="dim" style="font-size:11px;">{{ t.status | title }}</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <td class="td-right td-mono">
+            {% if t.pnl_dollars is not none %}
+              {% if t.pnl_dollars >= 0 %}
+                <span class="pnl-pos">+${{ "%.2f"|format(t.pnl_dollars) }}</span>
+              {% else %}
+                <span class="pnl-neg">-${{ "%.2f"|format(t.pnl_dollars|abs) }}</span>
+              {% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" class="mono muted"
+              style="text-align:center; padding:32px; font-size:12px; letter-spacing:0.08em;">
+            NO TRADES LOGGED YET
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+(function () {
+  const curve  = {{ equity_curve | tojson }};
+  const labels = curve.map(function(d) {
+    var p = d.date.split('-');
+    return p[1] + '/' + p[2];
+  });
+  const values = curve.map(function(d) { return d.value; });
+
+  new Chart(document.getElementById('equity-chart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        borderColor: '#00d4aa',
+        borderWidth: 2,
+        backgroundColor: 'rgba(0, 212, 170, 0.06)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: '#00d4aa',
+        pointHoverBorderColor: '#00d4aa',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          titleColor: '#444444',
+          bodyColor: '#e0e0e0',
+          bodyFont:  { family: "'JetBrains Mono', monospace", size: 12 },
+          titleFont: { family: "'JetBrains Mono', monospace", size: 10 },
+          padding: 10,
+          callbacks: {
+            label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid:   { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'rgba(255,255,255,0.06)' },
+          ticks: {
+            color: '#444444',
+            font: { family: "'JetBrains Mono', monospace", size: 10 },
+            maxTicksLimit: 7,
+            maxRotation: 0,
+          }
+        },
+        y: {
+          position: 'right',
+          grid:   { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'rgba(255,255,255,0.06)' },
+          ticks: {
+            color: '#444444',
+            font: { family: "'JetBrains Mono', monospace", size: 10 },
+            maxTicksLimit: 4,
+            callback: function(v) { return '$' + v.toFixed(0); }
+          }
+        }
+      }
+    }
+  });
+}());
+</script>
 {% endblock %}
