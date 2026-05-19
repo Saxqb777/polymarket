@@ -28,7 +28,7 @@
 
       <div class="statusbar-cell">
         <span class="statusbar-label">ACCT</span>
-        <span class="statusbar-value mono">${{ "%.2f" | format(stats.account_value) }}</span>
+        <span id="sb-acct" class="statusbar-value mono">${{ "%.2f" | format(stats.account_value) }}</span>
       </div>
 
       <div class="statusbar-cell">
@@ -45,15 +45,15 @@
       <div class="statusbar-cell">
         <span class="statusbar-label">POS</span>
         {% if active %}
-          <span class="mint mono" style="font-weight:600;">{{ active.symbol }}</span>
+          <span id="sb-pos" class="mint mono" style="font-weight:600;">{{ active.symbol }}</span>
         {% else %}
-          <span class="muted" style="font-weight:600;">NO POSITION</span>
+          <span id="sb-pos" class="muted" style="font-weight:600;">NO POSITION</span>
         {% endif %}
       </div>
 
       <div class="statusbar-cell">
         <span class="statusbar-label">NEXT SCAN</span>
-        <span class="statusbar-value dim">SUN 20:00 GULF · 2D 04H</span>
+        <span class="statusbar-value dim">SUN 20:00 GULF · <span id="sb-countdown">…</span></span>
       </div>
 
     </div>
@@ -88,6 +88,38 @@
   <!-- ── Scripts ────────────────────────────────────────────────────────────── -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+  <!-- ── Next-scan countdown (status bar) ──────────────────────────────────── -->
+  <script>
+  (function () {
+    function nextSundayUTC() {
+      var now = new Date();
+      var day = now.getUTCDay(); // 0=Sun … 6=Sat
+      var daysUntil = (7 - day) % 7;
+      if (daysUntil === 0 && (now.getUTCHours() > 16 || (now.getUTCHours() === 16 && now.getUTCMinutes() > 0))) {
+        daysUntil = 7;
+      }
+      var target = new Date(now);
+      target.setUTCDate(now.getUTCDate() + daysUntil);
+      target.setUTCHours(16, 0, 0, 0);
+      return target;
+    }
+    function tickCountdown() {
+      var el = document.getElementById('sb-countdown');
+      if (!el) return;
+      var target = nextSundayUTC();
+      var diff   = Math.max(0, target - new Date());
+      var d = Math.floor(diff / 86400000);
+      var h = Math.floor((diff % 86400000) / 3600000);
+      var m = Math.floor((diff % 3600000)  / 60000);
+      el.textContent = d > 0 ? (d + 'D ' + String(h).padStart(2,'0') + 'H')
+                              : (String(h).padStart(2,'0') + 'H ' + String(m).padStart(2,'0') + 'M');
+    }
+    tickCountdown();
+    setInterval(tickCountdown, 60000);
+  })();
+  </script>
+
   {% block scripts %}{% endblock %}
 
 </body>

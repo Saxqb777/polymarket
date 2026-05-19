@@ -1,9 +1,186 @@
 {% extends "base.html" %}
-{% block title %}Bot · SwingBot{% endblock %}
+{% block title %}Bot Status · SwingBot{% endblock %}
+
 {% block content %}
-<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:360px; gap:12px;">
-  <div class="mono" style="font-size:11px; letter-spacing:0.12em; color:var(--text-muted);">COMING SOON</div>
-  <div class="mono" style="font-size:22px; font-weight:600; color:var(--text-dim);">Bot Status</div>
-  <div class="mono" style="font-size:12px; color:var(--text-muted); margin-top:4px;">Last run · next scan · candidate log · manual trigger — Step 9</div>
+
+{# ── Page header ─────────────────────────────────────────────────────────────── #}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+  <span class="mono" style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted);">Bot Status</span>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span class="live-dot"></span>
+    <span class="mono mint" style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; font-weight:600;">ONLINE</span>
+  </div>
 </div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 1 — LAST RUN
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Last Run</span>
+    <span class="muted">{{ bot.last_run_date or "Never" }}</span>
+  </div>
+  <div class="block" id="bot-last-run">
+    <div class="td-cells">
+
+      <div class="td-cell">
+        <div class="td-cell-label">Ran</div>
+        <div class="td-cell-value mono dim" style="font-size:13px;">{{ bot.last_run_timestamp or "Never" }}</div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Scanned</div>
+        <div class="td-cell-value mono">{{ bot.last_run_candidates_scanned or "—" }}<span class="muted" style="font-size:13px;"> / 101</span></div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Passed Filter</div>
+        <div class="td-cell-value mono">{{ bot.last_run_candidates_passed or "—" }}</div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Decision</div>
+        {% if bot.last_run_decision == 'TRADE' %}
+          <div class="td-cell-value mono mint">TRADE</div>
+        {% elif bot.last_run_decision == 'NO_TRADE' %}
+          <div class="td-cell-value mono muted">NO TRADE</div>
+        {% else %}
+          <div class="td-cell-value mono muted">—</div>
+        {% endif %}
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Picked</div>
+        {% if bot.last_run_symbol %}
+          <div class="td-cell-value mono" style="font-weight:700; font-size:22px;">{{ bot.last_run_symbol }}</div>
+        {% else %}
+          <div class="td-cell-value mono muted">—</div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    {% if bot.last_run_reason %}
+    <div style="margin-top:16px; padding:12px 16px; background:var(--bg-elev); border:1px solid var(--border);">
+      <div class="mono muted" style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">Reason</div>
+      <div class="dim" style="font-size:13px; line-height:1.6;">{{ bot.last_run_reason }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 2 — NEXT SCHEDULED RUN
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Next Scheduled Run</span>
+    <span class="mono muted">Total runs · <span class="dim">{{ bot.total_runs_lifetime }}</span></span>
+  </div>
+  <div class="block">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:center;">
+
+      <div>
+        <div class="mono muted" style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">Next Scan</div>
+        <div class="mono" style="font-size:15px; color:var(--text-dim);">Sunday · 16:00 UTC · 20:00 Gulf</div>
+      </div>
+
+      <div>
+        <div class="mono muted" style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">Countdown</div>
+        <span id="bot-countdown" class="mono" style="font-size:22px; color:var(--text);">{{ bot.time_until_next }}</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 3 — CONFIG
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Config · Read-Only</span>
+    <span class="muted">Hardcoded risk rules</span>
+  </div>
+  <div class="block">
+    <div class="td-cells">
+
+      <div class="td-cell">
+        <div class="td-cell-label">Watchlist</div>
+        <div class="td-cell-value mono">101 <span class="muted" style="font-size:12px;">tickers</span></div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Min R:R</div>
+        <div class="td-cell-value mono">2.5</div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Min Move</div>
+        <div class="td-cell-value mono">6<span class="muted" style="font-size:13px;">%</span></div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Drawdown Cap</div>
+        <div class="td-cell-value mono red">8<span class="muted" style="font-size:13px;">%</span></div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Runtime</div>
+        <div class="td-cell-value mono dim" style="font-size:13px;">{{ bot.runtime_environment or "—" }}</div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Version</div>
+        <div class="td-cell-value mono dim" style="font-size:13px;">{{ bot.bot_version or "—" }}</div>
+      </div>
+
+      <div class="td-cell">
+        <div class="td-cell-label">Python</div>
+        <div class="td-cell-value mono dim" style="font-size:13px;">{{ bot.python_version or "—" }}</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{# ── Manual scan button ───────────────────────────────────────────────────────── #}
+<div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border); display:flex; align-items:center;">
+  <button class="action-button-secondary"
+          style="color:var(--amber); border-color:var(--amber); font-size:13px; padding:12px 24px;"
+          hx-post="/bot/trigger-scan"
+          hx-target="#bot-last-run"
+          hx-swap="innerHTML"
+          hx-confirm="Trigger bot run? This will scan 101 tickers and may send a Telegram message even outside normal Sunday hours."
+          hx-indicator="#scan-spinner">
+    ⚡ MANUAL SCAN NOW
+  </button>
+  <span id="scan-spinner" class="htmx-indicator mono muted" style="font-size:12px; margin-left:12px;">Scanning…</span>
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+(function() {
+  var target = new Date("{{ bot.next_scan_iso }}");
+  function tick() {
+    var now = new Date();
+    var diff = Math.max(0, target - now);
+    var d = Math.floor(diff / 86400000);
+    var h = Math.floor((diff % 86400000) / 3600000);
+    var m = Math.floor((diff % 3600000) / 60000);
+    var s = Math.floor((diff % 60000) / 1000);
+    var el = document.getElementById('bot-countdown');
+    if (el) {
+      if (d > 0) el.textContent = d + 'd ' + String(h).padStart(2,'0') + 'h ' + String(m).padStart(2,'0') + 'm';
+      else if (h > 0) el.textContent = h + 'h ' + String(m).padStart(2,'0') + 'm ' + String(s).padStart(2,'0') + 's';
+      else el.textContent = m + 'm ' + String(s).padStart(2,'0') + 's';
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
 {% endblock %}

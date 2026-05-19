@@ -385,6 +385,261 @@ def get_insights() -> dict:
     }
 
 
+def get_insights_data() -> dict:
+    """Comprehensive analytics for the insights page."""
+    starting = get_user_settings()["starting_capital"]
+
+    with _conn() as conn:
+        total_closed = conn.execute(
+            "SELECT COUNT(*) FROM trade_outcomes WHERE outcome IN ('WIN','LOSS')"
+        ).fetchone()[0]
+
+        # Win rate by quality tier
+        tier_rows = conn.execute("""
+            SELECT r.quality_tier AS tier,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN to2.outcome='WIN' THEN 1 ELSE 0 END) AS wins,
+                   SUM(CASE WHEN to2.outcome='LOSS' THEN 1 ELSE 0 END) AS losses
+            FROM trade_outcomes to2
+            JOIN runs r ON to2.run_id = r.id
+            WHERE to2.outcome IN ('WIN','LOSS')
+            GROUP BY r.quality_tier
+        """).fetchall()
+
+        # Win rate by confidence
+        conf_rows = conn.execute("""
+            SELECT r.confidence AS conf,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN to2.outcome='WIN' THEN 1 ELSE 0 END) AS wins,
+                   SUM(CASE WHEN to2.outcome='LOSS' THEN 1 ELSE 0 END) AS losses
+            FROM trade_outcomes to2
+            JOIN runs r ON to2.run_id = r.id
+            WHERE to2.outcome IN ('WIN','LOSS')
+            GROUP BY r.confidence
+        """).fetchall()
+
+        # R:R scatter: promised vs realized
+        scatter_rows = conn.execute("""
+            SELECT r.id AS trade_id, r.symbol, r.run_date,
+                   r.risk_reward AS promised_rr,
+                   r.entry_price, r.stop_loss,
+                   to2.exit_price, to2.outcome
+            FROM trade_outcomes to2
+            JOIN runs r ON to2.run_id = r.id
+            WHERE to2.outcome IN ('WIN','LOSS')
+              AND r.risk_reward IS NOT NULL
+              AND r.entry_price IS NOT NULL AND r.stop_loss IS NOT NULL
+              AND to2.exit_price IS NOT NULL
+        """).fetchall()
+
+        # Skipped winners
+        skipped_winners = conn.execute("""
+            SELECT COUNT(*), COALESCE(SUM(to2.pnl_dollars), 0)
+            FROM trade_outcomes to2
+            JOIN runs r ON to2.run_id = r.id
+            WHERE r.taken = 0 AND to2.outcome = 'WIN'
+        """).fetchone()
+
+        # Daily P&L for calendar (last 84 days)
+        cutoff_84 = (date.today() - timedelta(days=83)).isoformat()
+        cal_rows = conn.execute("""
+            SELECT to2.exit_date, SUM(to2.pnl_dollars) AS day_pnl
+            FROM trade_outcomes to2
+            WHERE to2.outcome IN ('WIN','LOSS') AND to2.exit_date >= ?
+            GROUP BY to2.exit_date
+        """, (cutoff_84,)).fetchall()
+
+        # All closed daily P&L for equity + drawdown curve (30 days)
+        cutoff_30 = (date.today() - timedelta(days=30)).isoformat()
+        pre_30_pnl = conn.execute("""
+            SELECT COALESCE(SUM(pnl_dollars), 0)
+            FROM trade_outcomes
+            WHERE outcome IN ('WIN','LOSS') AND exit_date < ?
+        """, (cutoff_30,)).fetchone()[0] or 0
+        eq_rows = conn.execute("""
+            SELECT exit_date, SUM(pnl_dollars) AS day_pnl
+            FROM trade_outcomes
+            WHERE outcome IN ('WIN','LOSS') AND exit_date >= ?
+            GROUP BY exit_date ORDER BY exit_date
+        """, (cutoff_30,)).fetchall()
+
+    # Build tier dict (ordered)
+    tier_order = ["PREMIUM", "STANDARD", "ACCEPTABLE", "BELOW_BAR"]
+    tier_map   = {}
+    for r in tier_rows:
+        rate = round(r["wins"] / r["total"] * 100, 1) if r["total"] else 0
+        tier_map[r["tier"] or ""] = {
+            "wins": r["wins"], "losses": r["losses"],
+            "total": r["total"], "rate": rate,
+        }
+    win_rate_by_tier = {t: tier_map.get(t, {"wins": 0, "losses": 0, "total": 0, "rate": 0})
+                        for t in tier_order}
+
+    # Confidence dict
+    conf_order = ["HIGH", "MEDIUM", "LOW"]
+    conf_map   = {}
+    for r in conf_rows:
+        rate = round(r["wins"] / r["total"] * 100, 1) if r["total"] else 0
+        conf_map[r["conf"] or ""] = {
+            "wins": r["wins"], "losses": r["losses"],
+            "total": r["total"], "rate": rate,
+        }
+    win_rate_by_confidence = {c: conf_map.get(c, {"wins": 0, "losses": 0, "total": 0, "rate": 0})
+                               for c in conf_order}
+
+    # R:R scatter points
+    rr_scatter = []
+    for r in scatter_rows:
+        entry = r["entry_price"] or 0
+        stop  = r["stop_loss"]   or 0
+        exit_ = r["exit_price"]  or 0
+        if entry and stop and entry != stop:
+            realized = round(abs(exit_ - entry) / abs(entry - stop), 2)
+        else:
+            realized = None
+        if realized is not None:
+            rr_scatter.append({
+                "trade_id":    r["trade_id"],
+                "symbol":      r["symbol"],
+                "run_date":    r["run_date"],
+                "promised_rr": round(r["promised_rr"], 2),
+                "realized_rr": realized,
+                "outcome":     r["outcome"],
+            })
+
+    # Calendar data
+    calendar_data = {r["exit_date"]: round(r["day_pnl"], 2) for r in cal_rows}
+    calendar_days = [(date.today() - timedelta(days=83 - i)).isoformat()
+                     for i in range(84)]
+
+    # Equity + drawdown (30-day window)
+    pnl_by_date = {r["exit_date"]: (r["day_pnl"] or 0) for r in eq_rows}
+    running  = starting + pre_30_pnl
+    peak     = running
+    dd_curve = []
+    for i in range(31):
+        d = (date.today() - timedelta(days=30 - i)).isoformat()
+        running += pnl_by_date.get(d, 0)
+        peak     = max(peak, running)
+        dd_pct   = round((running - peak) / peak * 100, 2) if peak else 0
+        dd_curve.append({"date": d, "equity": round(running, 2), "drawdown_pct": dd_pct})
+
+    max_dd = min((p["drawdown_pct"] for p in dd_curve), default=0)
+
+    return {
+        "total_closed":          total_closed,
+        "win_rate_by_tier":      win_rate_by_tier,
+        "win_rate_by_confidence": win_rate_by_confidence,
+        "rr_scatter":            rr_scatter,
+        "calendar_data":         calendar_data,
+        "calendar_days":         calendar_days,
+        "drawdown_curve":        dd_curve,
+        "max_drawdown":          abs(max_dd),
+        "skipped_winners":       skipped_winners[0],
+        "total_value_missed":    round(skipped_winners[1], 2),
+    }
+
+
+def get_bot_status() -> dict:
+    """Last run info + next scheduled scan timing."""
+    import sys
+    import os
+    from datetime import datetime as dt, timezone, timedelta as td
+
+    with _conn() as conn:
+        last = conn.execute("""
+            SELECT run_timestamp, run_date, candidates_scanned, candidates_passed,
+                   decision, symbol, no_trade_reason
+            FROM runs ORDER BY id DESC LIMIT 1
+        """).fetchone()
+        total_runs = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+
+    now_utc = dt.now(timezone.utc)
+    # Next Sunday at 16:00 UTC
+    days_ahead = (6 - now_utc.weekday()) % 7  # 6 = Sunday in Python (Mon=0)
+    if days_ahead == 0 and (now_utc.hour > 16 or (now_utc.hour == 16 and now_utc.minute > 0)):
+        days_ahead = 7
+    next_scan = (now_utc + td(days=days_ahead)).replace(
+        hour=16, minute=0, second=0, microsecond=0
+    )
+    delta      = next_scan - now_utc
+    total_secs = max(0, int(delta.total_seconds()))
+    days_left  = total_secs // 86400
+    hours_left = (total_secs % 86400) // 3600
+    mins_left  = (total_secs % 3600) // 60
+
+    if days_left > 0:
+        time_until = f"{days_left}d {hours_left:02d}h {mins_left:02d}m"
+    elif hours_left > 0:
+        time_until = f"{hours_left}h {mins_left:02d}m"
+    else:
+        time_until = f"{mins_left}m"
+
+    return {
+        "last_run_timestamp":         last["run_timestamp"]         if last else None,
+        "last_run_date":              last["run_date"]              if last else None,
+        "last_run_candidates_scanned": last["candidates_scanned"]   if last else None,
+        "last_run_candidates_passed": last["candidates_passed"]     if last else None,
+        "last_run_decision":          last["decision"]              if last else None,
+        "last_run_symbol":            last["symbol"]                if last else None,
+        "last_run_reason":            last["no_trade_reason"]       if last else None,
+        "next_scan_iso":              next_scan.isoformat(),
+        "next_scan_display":          next_scan.strftime("%A · %H:%M UTC"),
+        "time_until_next":            time_until,
+        "total_runs_lifetime":        total_runs,
+        "python_version":             f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "runtime_environment":        os.getenv("RAILWAY_ENVIRONMENT", "local dev"),
+        "bot_version":                "v1.2",
+    }
+
+
+def get_all_trades_filtered(
+    tier: Optional[str] = None,
+    status: Optional[str] = None,
+    days: Optional[int] = None,
+) -> list[dict]:
+    """Full trade history with optional server-side filters."""
+    conditions = []
+    params: list = []
+
+    if tier:
+        conditions.append("r.quality_tier = ?")
+        params.append(tier)
+
+    if days:
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        conditions.append("r.run_date >= ?")
+        params.append(cutoff)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    with _conn() as conn:
+        rows = conn.execute(f"""
+            SELECT
+                r.id, r.run_date, r.symbol,
+                r.entry_price, r.stop_loss, r.target_price, r.risk_reward,
+                r.confidence, r.quality_tier, r.target_move_pct,
+                r.decision, r.no_trade_reason,
+                r.taken, r.skip_reason,
+                to2.outcome, to2.exit_price, to2.pnl_dollars, to2.pnl_pct
+            FROM runs r
+            LEFT JOIN trade_outcomes to2 ON r.id = to2.run_id
+            {where}
+            ORDER BY r.id DESC
+        """, params).fetchall()
+
+    trades = []
+    for row in rows:
+        t = dict(row)
+        t["tier_badge"] = _fmt_tier(t.get("quality_tier"))
+        t["status"]     = _derive_status(t)
+        # Client-side status filter applied here
+        if status and t["status"] != status:
+            continue
+        trades.append(t)
+    return trades
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _derive_status(t: dict) -> str:

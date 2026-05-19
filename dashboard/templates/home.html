@@ -10,7 +10,7 @@
   <div class="hero-label">Account Value · USD</div>
   <div class="hero-number">
     <span class="hero-dollar">$</span>
-    <span class="hero-amount">{{ "{:,.2f}".format(stats.account_value) }}</span>
+    <span id="hero-amount" class="hero-amount">{{ "{:,.2f}".format(stats.account_value) }}</span>
   </div>
   <div class="hero-delta">
     {% if stats.pnl_pct == 0 %}
@@ -28,10 +28,13 @@
     {% endif %}
   </div>
   {% if stats.completed > 0 or stats.open_position_symbol %}
-  <div class="hero-breakdown">
-    Cash ${{ "%.2f"|format(stats.cash_position) }}
+  <div id="hero-breakdown" class="hero-breakdown"
+       data-cash="{{ stats.cash_position }}"
+       data-open="{{ stats.open_position_value }}"
+       data-symbol="{{ stats.open_position_symbol or '' }}">
+    Cash $<span id="hb-cash">{{ "%.2f"|format(stats.cash_position) }}</span>
     {% if stats.open_position_symbol %}
-      · Open ${{ "%.2f"|format(stats.open_position_value) }} in {{ stats.open_position_symbol }}
+      · Open $<span id="hb-open">{{ "%.2f"|format(stats.open_position_value) }}</span> in {{ stats.open_position_symbol }}
     {% else %}
       · No open position
     {% endif %}
@@ -115,7 +118,12 @@
     <span>Active Position</span>
     <span>Day {{ active.days_held }} of 5–7 · Live since {{ active.run_date }}</span>
   </div>
-  <div class="active-card">
+  <div class="active-card"
+       data-symbol="{{ active.symbol }}"
+       data-entry="{{ active.actual_entry or active.entry_price or '' }}"
+       data-shares="{{ active.actual_shares or '' }}"
+       data-stop="{{ active.stop_loss or '' }}"
+       data-target="{{ active.target_price or '' }}">
     <div class="pos-grid">
 
       {# ── Left: symbol + price cells ───────────────────────────────────────── #}
@@ -139,17 +147,13 @@
               {% if active.actual_entry %}${{ "%.2f"|format(active.actual_entry) }}{% elif active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
             </div>
           </div>
-          <div class="pos-cell">
+          <div class="pos-cell" id="pos-last-cell">
             <div class="pos-cell-label">Last</div>
-            <div class="pos-cell-value dim">
-              {% if active.actual_entry %}${{ "%.2f"|format(active.actual_entry) }}{% elif active.entry_price %}${{ "%.2f"|format(active.entry_price) }}{% else %}—{% endif %}
-            </div>
+            <div id="pos-last" class="pos-cell-value dim">—</div>
           </div>
-          <div class="pos-cell">
-            <div class="pos-cell-label">{% if active.actual_shares %}Shares{% else %}P&L{% endif %}</div>
-            <div class="pos-cell-value {% if active.actual_shares %}{% else %}muted{% endif %}">
-              {% if active.actual_shares %}{{ "%.2f"|format(active.actual_shares) }}{% else %}—{% endif %}
-            </div>
+          <div class="pos-cell" id="pos-pnl-cell">
+            <div class="pos-cell-label">Live P&amp;L</div>
+            <div id="pos-pnl" class="pos-cell-value muted">—</div>
           </div>
           {# Row 2 #}
           <div class="pos-cell">
@@ -338,6 +342,126 @@
 
 
 {% block scripts %}
+<script>
+/* ── Live price polling ────────────────────────────────────────────────────── */
+(function () {
+  var card = document.querySelector('.active-card');
+  if (!card) return;
+
+  var symbol  = card.dataset.symbol;
+  var entry   = parseFloat(card.dataset.entry)  || 0;
+  var shares  = parseFloat(card.dataset.shares) || 0;
+  var stop    = parseFloat(card.dataset.stop)   || 0;
+  var target  = parseFloat(card.dataset.target) || 0;
+  var startingCapital = {{ stats.starting_capital }};
+  var closedPnl       = {{ stats.total_pnl }};
+  var cashBase        = {{ stats.cash_position }};
+
+  if (!symbol || !shares) return;
+
+  var lastPrice = null;
+  var staleTimer = null;
+
+  function fmt2(n) { return n.toFixed(2); }
+
+  function flash(el, cls) {
+    el.classList.remove('flash-up', 'flash-down');
+    void el.offsetWidth;
+    el.classList.add(cls);
+    setTimeout(function () { el.classList.remove(cls); }, 400);
+  }
+
+  function applyPrice(data) {
+    var price = data.price;
+    var chgPct = data.change_pct;
+
+    // LAST cell
+    var lastEl = document.getElementById('pos-last');
+    if (lastEl) {
+      if (lastPrice !== null && price !== lastPrice) {
+        flash(lastEl, price > lastPrice ? 'flash-up' : 'flash-down');
+      }
+      lastEl.textContent = '$' + fmt2(price);
+      lastEl.className = 'pos-cell-value ' + (chgPct >= 0 ? 'mint' : 'red');
+    }
+
+    // Live P&L
+    var pnlEl = document.getElementById('pos-pnl');
+    if (pnlEl && entry && shares) {
+      var livePnl = (price - entry) * shares;
+      pnlEl.textContent = (livePnl >= 0 ? '+' : '') + '$' + fmt2(livePnl);
+      pnlEl.className = 'pos-cell-value ' + (livePnl >= 0 ? 'mint' : 'red');
+    }
+
+    // Progress rail dot
+    var dot = document.querySelector('.progress-indicator');
+    if (dot && stop && target) {
+      var range = target - stop;
+      var pct = range ? Math.max(0, Math.min(100, (price - stop) / range * 100)) : 50;
+      dot.style.left = pct + '%';
+    }
+
+    // Status bar POS
+    var sbPos = document.getElementById('sb-pos');
+    if (sbPos) {
+      var sign = chgPct >= 0 ? '+' : '';
+      sbPos.textContent = symbol + ' ' + sign + fmt2(chgPct) + '%';
+      sbPos.style.color = chgPct >= 0 ? 'var(--mint)' : 'var(--red)';
+    }
+
+    // Hero equity: starting + closed_pnl + live_pnl
+    var heroEl = document.getElementById('hero-amount');
+    if (heroEl && entry && shares) {
+      var livePnl2 = (price - entry) * shares;
+      var totalEquity = startingCapital + closedPnl + livePnl2;
+      heroEl.textContent = totalEquity.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+
+    // Hero breakdown open value
+    var hbOpen = document.getElementById('hb-open');
+    if (hbOpen && shares) {
+      hbOpen.textContent = fmt2(price * shares);
+    }
+    var hbCash = document.getElementById('hb-cash');
+    if (hbCash && entry && shares) {
+      var liveOpenCost = price * shares;
+      var liveCash = startingCapital + closedPnl - (entry * shares) + ((price - entry) * shares);
+      hbCash.textContent = fmt2(liveCash);
+    }
+
+    // Status bar ACCT
+    var sbAcct = document.getElementById('sb-acct');
+    if (sbAcct && entry && shares) {
+      var livePnl3 = (price - entry) * shares;
+      var totalEq2 = startingCapital + closedPnl + livePnl3;
+      sbAcct.textContent = '$' + fmt2(totalEq2);
+    }
+
+    lastPrice = price;
+
+    // Stale indicator
+    if (data.stale) {
+      var mins = Math.round((data.stale_secs || 0) / 60);
+      if (lastEl) lastEl.title = 'Stale — last update ' + mins + 'm ago';
+    }
+  }
+
+  function poll() {
+    if (document.hidden) return;
+    fetch('/api/live-price/' + symbol, {credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data) applyPrice(data); })
+      .catch(function () {});
+  }
+
+  poll();
+  var iv = setInterval(poll, 60000);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) poll();
+  });
+})();
+</script>
+
 <script>
 (function () {
   const curve  = {{ equity_curve | tojson }};

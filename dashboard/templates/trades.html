@@ -1,9 +1,174 @@
 {% extends "base.html" %}
 {% block title %}Trades · SwingBot{% endblock %}
+
 {% block content %}
-<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:360px; gap:12px;">
-  <div class="mono" style="font-size:11px; letter-spacing:0.12em; color:var(--text-muted);">COMING SOON</div>
-  <div class="mono" style="font-size:22px; font-weight:600; color:var(--text-dim);">Trades View</div>
-  <div class="mono" style="font-size:12px; color:var(--text-muted); margin-top:4px;">Full history · search · filter · export — Step 7</div>
+
+{# ── Page header ─────────────────────────────────────────────────────────────── #}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+  <span class="mono" style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted);">Trade History</span>
+  <span class="mono dim" style="font-size:11px; letter-spacing:0.06em;">
+    {{ trades|length }} trades · {{ stats.wins }}W {{ stats.losses }}L
+  </span>
 </div>
+
+{# ── Filter row ───────────────────────────────────────────────────────────────── #}
+<form method="get" action="/trades">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+
+    <select name="tier" class="form-input form-select"
+            style="width:auto; font-size:12px; padding:8px 32px 8px 12px;"
+            onchange="this.form.submit()">
+      <option value=""      {% if not filter_tier   %}selected{% endif %}>All Tiers</option>
+      <option value="PREMIUM"     {% if filter_tier == 'PREMIUM'     %}selected{% endif %}>★ Premium</option>
+      <option value="STANDARD"    {% if filter_tier == 'STANDARD'    %}selected{% endif %}>Standard</option>
+      <option value="ACCEPTABLE"  {% if filter_tier == 'ACCEPTABLE'  %}selected{% endif %}>Acceptable</option>
+      <option value="BELOW_BAR"   {% if filter_tier == 'BELOW_BAR'   %}selected{% endif %}>Below Bar</option>
+    </select>
+
+    <select name="status" class="form-input form-select"
+            style="width:auto; font-size:12px; padding:8px 32px 8px 12px;"
+            onchange="this.form.submit()">
+      <option value=""         {% if not filter_status              %}selected{% endif %}>All Status</option>
+      <option value="open"     {% if filter_status == 'open'        %}selected{% endif %}>Open</option>
+      <option value="target"   {% if filter_status == 'target'      %}selected{% endif %}>Target Hit</option>
+      <option value="stopped"  {% if filter_status == 'stopped'     %}selected{% endif %}>Stopped</option>
+      <option value="skipped"  {% if filter_status == 'skipped'     %}selected{% endif %}>Skipped</option>
+      <option value="no_trade" {% if filter_status == 'no_trade'    %}selected{% endif %}>No Trade</option>
+    </select>
+
+    <select name="days" class="form-input form-select"
+            style="width:auto; font-size:12px; padding:8px 32px 8px 12px;"
+            onchange="this.form.submit()">
+      <option value=""    {% if not filter_days          %}selected{% endif %}>All Time</option>
+      <option value="30"  {% if filter_days == '30'      %}selected{% endif %}>Last 30 Days</option>
+      <option value="90"  {% if filter_days == '90'      %}selected{% endif %}>Last 90 Days</option>
+      <option value="180" {% if filter_days == '180'     %}selected{% endif %}>Last 180 Days</option>
+    </select>
+
+    <input id="search"
+           type="text"
+           name="q"
+           placeholder="Search ticker…"
+           class="form-input"
+           style="width:160px; font-size:12px; padding:8px 12px;"
+           autocomplete="off"
+           value="">
+
+    <a href="/trades/export" class="action-button-ghost" style="margin-left:auto;">↓ CSV</a>
+
+  </div>
+</form>
+
+{# ── Trade table ──────────────────────────────────────────────────────────────── #}
+<div class="section">
+  <div style="border:1px solid var(--border); overflow:hidden;">
+    <table class="trade-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Tier</th>
+          <th>Ticker</th>
+          <th>Entry</th>
+          <th>Stop</th>
+          <th>Target</th>
+          <th>R:R</th>
+          <th class="th-right">Status</th>
+          <th class="th-right">P&L</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trades %}
+        <tr onclick="window.location='/trade/{{ t.id }}'" data-symbol="{{ t.symbol or '' }}">
+
+          <td class="td-date">{{ t.run_date }}</td>
+
+          <td>
+            {% if t.quality_tier == 'PREMIUM' %}
+              <span class="tier-badge tier-prem">★ Prem</span>
+            {% elif t.quality_tier == 'STANDARD' %}
+              <span class="tier-badge tier-stand">Stand</span>
+            {% elif t.quality_tier == 'ACCEPTABLE' %}
+              <span class="tier-badge tier-accept">Accept</span>
+            {% elif t.quality_tier == 'BELOW_BAR' %}
+              <span class="tier-badge tier-below">Below</span>
+            {% else %}
+              <span class="muted" style="font-size:12px;">—</span>
+            {% endif %}
+          </td>
+
+          <td class="td-ticker">{{ t.symbol or "—" }}</td>
+
+          <td class="td-mono">
+            {% if t.entry_price %}${{ "%.2f"|format(t.entry_price) }}{% else %}—{% endif %}
+          </td>
+          <td class="td-mono td-dim">
+            {% if t.stop_loss %}${{ "%.2f"|format(t.stop_loss) }}{% else %}—{% endif %}
+          </td>
+          <td class="td-mono td-dim">
+            {% if t.target_price %}${{ "%.2f"|format(t.target_price) }}{% else %}—{% endif %}
+          </td>
+          <td class="td-mono">
+            {{ "%.2f"|format(t.risk_reward) if t.risk_reward else "—" }}
+          </td>
+
+          <td class="td-right">
+            <div class="status-cell" style="justify-content:flex-end;">
+              {% if t.status == 'open' %}
+                <span class="dot dot-open"></span>
+                <span class="mono amber" style="font-size:11px;">Open</span>
+              {% elif t.status == 'target' %}
+                <span class="dot dot-target"></span>
+                <span class="mono mint" style="font-size:11px;">Target</span>
+              {% elif t.status == 'stopped' %}
+                <span class="dot dot-stop"></span>
+                <span class="mono red" style="font-size:11px;">Stop</span>
+              {% elif t.status == 'skipped' %}
+                <span class="dot dot-muted"></span>
+                <span class="mono muted" style="font-size:11px;">Skipped</span>
+              {% elif t.status == 'no_trade' %}
+                <span class="muted" style="font-size:11px;">No trade</span>
+              {% else %}
+                <span class="dim" style="font-size:11px;">{{ t.status | title }}</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <td class="td-right td-mono">
+            {% if t.pnl_dollars is not none %}
+              {% if t.pnl_dollars >= 0 %}
+                <span class="pnl-pos">+${{ "%.2f"|format(t.pnl_dollars) }}</span>
+              {% else %}
+                <span class="pnl-neg">-${{ "%.2f"|format(t.pnl_dollars|abs) }}</span>
+              {% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" class="mono muted"
+              style="text-align:center; padding:48px; font-size:12px; letter-spacing:0.08em;">
+            NO TRADES LOGGED YET
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+document.getElementById('search').addEventListener('input', function() {
+  var q = this.value.toLowerCase();
+  document.querySelectorAll('tbody tr[data-symbol]').forEach(function(row) {
+    row.style.display = q && !row.dataset.symbol.toLowerCase().includes(q) ? 'none' : '';
+  });
+});
+</script>
 {% endblock %}

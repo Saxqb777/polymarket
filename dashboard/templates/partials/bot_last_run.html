@@ -1,0 +1,47 @@
+<div class="td-cells">
+
+  <div class="td-cell">
+    <div class="td-cell-label">Ran</div>
+    <div class="td-cell-value mono dim" style="font-size:13px;">{{ bot.last_run_timestamp or "—" }}</div>
+  </div>
+
+  <div class="td-cell">
+    <div class="td-cell-label">Scanned</div>
+    <div class="td-cell-value mono">{{ bot.last_run_candidates_scanned or "—" }}<span class="muted" style="font-size:13px;"> / 101</span></div>
+  </div>
+
+  <div class="td-cell">
+    <div class="td-cell-label">Passed Filter</div>
+    <div class="td-cell-value mono">{{ bot.last_run_candidates_passed or "—" }}</div>
+  </div>
+
+  <div class="td-cell">
+    <div class="td-cell-label">Decision</div>
+    {% if bot.last_run_decision == 'TRADE' %}
+      <div class="td-cell-value mono mint">TRADE</div>
+    {% elif bot.last_run_decision == 'NO_TRADE' %}
+      <div class="td-cell-value mono muted">NO TRADE</div>
+    {% else %}
+      <div class="td-cell-value mono muted">—</div>
+    {% endif %}
+  </div>
+
+  <div class="td-cell">
+    <div class="td-cell-label">Picked</div>
+    {% if bot.last_run_symbol %}
+      <div class="td-cell-value mono" style="font-weight:700; font-size:22px;">{{ bot.last_run_symbol }}</div>
+    {% else %}
+      <div class="td-cell-value mono muted">—</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% if bot.last_run_reason %}
+<div style="margin-top:16px; padding:12px 16px; background:var(--bg-elev); border:1px solid var(--border);">
+  <div class="mono muted" style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">Reason</div>
+  <div class="dim" style="font-size:13px; line-height:1.6;">{{ bot.last_run_reason }}</div>
+</div>
+{% endif %}
+
+<div class="mono mint" style="font-size:11px; margin-top:12px; letter-spacing:0.1em;">✓ SCAN COMPLETE</div>

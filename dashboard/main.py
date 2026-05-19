@@ -7,19 +7,22 @@ Run locally:
 Environment variables (add to .env):
     DASHBOARD_PASSWORD=yourpassword   (required — no default)
 """
+import asyncio
+import importlib
 import pathlib
 import sys
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from dashboard.auth import require_auth
 from dashboard import migrations, queries, commands
 from dashboard.queries import get_user_settings
+from dashboard.live_price import get_price_or_none, is_market_open
 
 _HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(_HERE.parent))
@@ -111,18 +114,62 @@ def _stub_ctx(request: Request) -> dict:
 
 
 @app.get("/trades")
-async def trades_page(request: Request, _user: str = Depends(require_auth)):
-    return templates.TemplateResponse(request, "trades.html", _stub_ctx(request))
+async def trades_page(
+    request: Request,
+    tier: str = "", status: str = "", days: str = "",
+    _user: str = Depends(require_auth),
+):
+    all_trades = queries.get_all_trades_filtered(
+        tier   or None,
+        status or None,
+        int(days) if days else None,
+    )
+    ctx = _stub_ctx(request)
+    ctx.update({
+        "trades":        all_trades,
+        "filter_tier":   tier,
+        "filter_status": status,
+        "filter_days":   days,
+    })
+    return templates.TemplateResponse(request, "trades.html", ctx)
+
+
+@app.get("/trades/export")
+async def trades_export(
+    tier: str = "", status: str = "", days: str = "",
+    _user: str = Depends(require_auth),
+):
+    trades = queries.get_all_trades_filtered(
+        tier   or None,
+        status or None,
+        int(days) if days else None,
+    )
+    lines = ["Date,Symbol,Tier,Confidence,Entry,Stop,Target,RR,Status,ExitPrice,PnL$,PnL%"]
+    for t in trades:
+        lines.append(",".join(str(t.get(k) or "") for k in [
+            "run_date", "symbol", "quality_tier", "confidence",
+            "entry_price", "stop_loss", "target_price", "risk_reward",
+            "status", "exit_price", "pnl_dollars", "pnl_pct",
+        ]))
+    return PlainTextResponse(
+        "\n".join(lines),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=swingbot_trades.csv"},
+    )
 
 
 @app.get("/insights")
 async def insights_page(request: Request, _user: str = Depends(require_auth)):
-    return templates.TemplateResponse(request, "insights.html", _stub_ctx(request))
+    ctx = _stub_ctx(request)
+    ctx["insights"] = queries.get_insights_data()
+    return templates.TemplateResponse(request, "insights.html", ctx)
 
 
 @app.get("/bot")
 async def bot_page(request: Request, _user: str = Depends(require_auth)):
-    return templates.TemplateResponse(request, "bot.html", _stub_ctx(request))
+    ctx = _stub_ctx(request)
+    ctx["bot"] = queries.get_bot_status()
+    return templates.TemplateResponse(request, "bot.html", ctx)
 
 
 # ── Trade detail ──────────────────────────────────────────────────────────────
@@ -284,3 +331,32 @@ async def post_settings(request: Request,
         "days_since_blowup": stats["days_since_inception"],
         "saved":             True,
     })
+
+
+# ── Live price JSON API ───────────────────────────────────────────────────────
+
+@app.get("/api/live-price/{symbol}")
+async def api_live_price(symbol: str, _user: str = Depends(require_auth)):
+    """Returns live price for an open position symbol only (security guard)."""
+    active = queries.get_active_position()
+    if not active or (active.get("symbol") or "").upper() != symbol.upper():
+        raise HTTPException(status_code=404, detail="No open position for this symbol")
+    data = get_price_or_none(symbol.upper())
+    if not data:
+        raise HTTPException(status_code=503, detail="Price temporarily unavailable")
+    return {**data, "market_open": is_market_open()}
+
+
+# ── Bot manual scan trigger ───────────────────────────────────────────────────
+
+@app.post("/bot/trigger-scan")
+async def trigger_scan(request: Request, _user: str = Depends(require_auth)):
+    """Run the full bot pipeline once. Blocks until complete, then returns last-run partial."""
+    def _run_pipeline():
+        # Import lazily to avoid polluting module namespace
+        bot_main = importlib.import_module("main")
+        bot_main.run_pipeline(dry_run=False)
+
+    await asyncio.to_thread(_run_pipeline)
+    bot = queries.get_bot_status()
+    return templates.TemplateResponse(request, "partials/bot_last_run.html", {"bot": bot})

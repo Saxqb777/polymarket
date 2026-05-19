@@ -1,9 +1,379 @@
 {% extends "base.html" %}
 {% block title %}Insights · SwingBot{% endblock %}
+
 {% block content %}
-<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:360px; gap:12px;">
-  <div class="mono" style="font-size:11px; letter-spacing:0.12em; color:var(--text-muted);">COMING SOON</div>
-  <div class="mono" style="font-size:22px; font-weight:600; color:var(--text-dim);">Insights View</div>
-  <div class="mono" style="font-size:12px; color:var(--text-muted); margin-top:4px;">Win rate by tier · drawdown chart · confidence breakdown — Step 8</div>
+
+{# ── Page header ─────────────────────────────────────────────────────────────── #}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+  <span class="mono" style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted);">Performance Analytics</span>
+  <span class="mono dim" style="font-size:11px; letter-spacing:0.06em;">{{ insights.total_closed }} closed trades</span>
 </div>
+
+{# ── Empty state ──────────────────────────────────────────────────────────────── #}
+{% if insights.total_closed < 1 %}
+<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:360px; gap:12px;">
+  <div class="mono" style="font-size:11px; letter-spacing:0.12em; color:var(--text-muted);">NO DATA YET</div>
+  <div class="mono" style="font-size:20px; color:var(--text-dim);">Close some trades to see analytics</div>
+</div>
+
+{% else %}
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 1 — WIN RATE BY TIER
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Win Rate by Tier</span>
+    {% if insights.skipped_winners is defined and insights.skipped_winners > 0 %}
+    <span class="mono amber" style="font-size:11px;">{{ insights.skipped_winners }} winners skipped · ${{ "%.0f"|format(insights.total_value_missed) }} missed</span>
+    {% endif %}
+  </div>
+  <div class="block">
+    {% for tier_name in ['PREMIUM', 'STANDARD', 'ACCEPTABLE', 'BELOW_BAR'] %}
+      {% set data = insights.win_rate_by_tier.get(tier_name, {}) %}
+      <div style="margin-bottom:{% if not loop.last %}20px{% else %}0{% endif %};">
+        <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:12px; margin-bottom:6px;">
+          <span class="dim">
+            {% if tier_name == 'PREMIUM' %}★ PREMIUM
+            {% elif tier_name == 'STANDARD' %}STANDARD
+            {% elif tier_name == 'ACCEPTABLE' %}ACCEPTABLE
+            {% else %}BELOW BAR
+            {% endif %}
+          </span>
+          {% if data.get('total', 0) > 0 %}
+            <span class="mint">{{ data.wins }}/{{ data.total }} · {{ "%.0f"|format(data.rate) }}%</span>
+          {% else %}
+            <span class="muted">— no trades</span>
+          {% endif %}
+        </div>
+        {% if data.get('total', 0) > 0 %}
+        <div style="height:4px; background:var(--bg-elev-2); position:relative;">
+          <div style="height:4px; background:var(--mint); width:{{ data.rate }}%; opacity:0.7;"></div>
+        </div>
+        {% else %}
+        <div style="height:4px; background:var(--bg-elev-2);"></div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 2 — WIN RATE BY CONFIDENCE
+   ══════════════════════════════════════════════════════════════════════════════ #}
+{% if insights.win_rate_by_confidence %}
+<div class="section">
+  <div class="section-header">
+    <span>Win Rate by Confidence</span>
+  </div>
+  <div class="block">
+    {% for conf_name, data in insights.win_rate_by_confidence.items() %}
+      <div style="margin-bottom:{% if not loop.last %}20px{% else %}0{% endif %};">
+        <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:12px; margin-bottom:6px;">
+          <span class="dim">{{ conf_name | upper }}</span>
+          {% if data.get('total', 0) > 0 %}
+            <span class="mint">{{ data.wins }}/{{ data.total }} · {{ "%.0f"|format(data.rate) }}%</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </div>
+        {% if data.get('total', 0) > 0 %}
+        <div style="height:4px; background:var(--bg-elev-2); position:relative;">
+          <div style="height:4px; background:var(--amber); width:{{ data.rate }}%; opacity:0.7;"></div>
+        </div>
+        {% else %}
+        <div style="height:4px; background:var(--bg-elev-2);"></div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 3 — R:R SCATTER
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>Promised vs Realized R:R</span>
+    <span class="muted">{{ insights.rr_scatter|length }} data points</span>
+  </div>
+  {% if insights.rr_scatter|length < 3 %}
+  <div class="block" style="text-align:center; padding:40px;">
+    <div class="mono muted" style="font-size:12px;">Need at least 3 closed trades for scatter pattern</div>
+    <div class="mono muted" style="font-size:11px; margin-top:8px;">{{ insights.rr_scatter|length }} of 3 required</div>
+  </div>
+  {% else %}
+  <div class="block">
+    <div style="height:200px; position:relative;">
+      <canvas id="rr-chart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 4 — CALENDAR HEATMAP (last 84 days)
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-header">
+    <span>P&L Heatmap · Last 12 Weeks</span>
+    <div style="display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">
+      <span>Loss</span>
+      <div style="width:10px; height:10px; background:#7a1a1a;"></div>
+      <div style="width:10px; height:10px; background:#3a0f0f;"></div>
+      <div style="width:10px; height:10px; background:var(--bg-elev-2);"></div>
+      <div style="width:10px; height:10px; background:rgba(0,212,170,0.25);"></div>
+      <div style="width:10px; height:10px; background:rgba(0,212,170,0.6);"></div>
+      <span>Win</span>
+    </div>
+  </div>
+  <div class="block">
+    {# Day-of-week labels #}
+    <div style="display:flex; gap:3px; margin-bottom:6px; padding-left:0;">
+      {% set dow_labels = ['M','T','W','T','F','S','S'] %}
+      {% for lbl in dow_labels %}
+        <div style="width:14px; font-family:var(--font-mono); font-size:9px; color:var(--text-muted); text-align:center;">{{ lbl }}</div>
+        {% if not loop.last %}<div style="width:3px;"></div>{% endif %}
+      {% endfor %}
+    </div>
+    {# 84-day grid: 7 days wide × 12 weeks tall — rows are weeks, cells are days #}
+    <div style="display:grid; grid-template-columns: repeat(12, 1fr); gap:3px;">
+      {% for week_start in range(0, 84, 7) %}
+      <div style="display:flex; flex-direction:column; gap:3px;">
+        {% for offset in range(7) %}
+          {% set idx = week_start + offset %}
+          {% if idx < insights.calendar_days|length %}
+            {% set day = insights.calendar_days[idx] %}
+            {% set pnl = insights.calendar_data.get(day, none) %}
+            {% if pnl is not none %}
+              {% if pnl > 20 %}{% set cal_class = "cal-w5" %}{% set bg = "rgba(0,212,170,0.85)" %}
+              {% elif pnl > 10 %}{% set cal_class = "cal-w4" %}{% set bg = "rgba(0,212,170,0.6)" %}
+              {% elif pnl > 5 %}{% set cal_class = "cal-w3" %}{% set bg = "rgba(0,212,170,0.4)" %}
+              {% elif pnl > 0 %}{% set cal_class = "cal-w2" %}{% set bg = "rgba(0,212,170,0.25)" %}
+              {% elif pnl == 0 %}{% set cal_class = "cal-none" %}{% set bg = "var(--bg-elev-2)" %}
+              {% elif pnl > -5 %}{% set cal_class = "cal-l2" %}{% set bg = "rgba(255,69,69,0.25)" %}
+              {% elif pnl > -10 %}{% set cal_class = "cal-l3" %}{% set bg = "rgba(255,69,69,0.45)" %}
+              {% elif pnl > -20 %}{% set cal_class = "cal-l4" %}{% set bg = "rgba(255,69,69,0.65)" %}
+              {% else %}{% set cal_class = "cal-l5" %}{% set bg = "rgba(255,69,69,0.85)" %}
+              {% endif %}
+              <div title="{{ day }} · ${{ '%.2f'|format(pnl) }}"
+                   style="width:14px; height:14px; background:{{ bg }}; cursor:default;"></div>
+            {% else %}
+              <div title="{{ day }} · No activity"
+                   style="width:14px; height:14px; background:var(--bg-elev-2); opacity:0.4; cursor:default;"></div>
+            {% endif %}
+          {% else %}
+            <div style="width:14px; height:14px;"></div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SECTION 5 — EQUITY + DRAWDOWN
+   ══════════════════════════════════════════════════════════════════════════════ #}
+{% if insights.drawdown_curve and insights.drawdown_curve|length > 1 %}
+<div class="section">
+  <div class="section-header">
+    <span>Equity &amp; Drawdown</span>
+    <span class="mono red" style="font-size:11px;">
+      MAX DRAWDOWN ▼{{ "%.2f"|format(insights.max_drawdown) }}%
+    </span>
+  </div>
+  <div class="block">
+    <div style="height:200px; position:relative;">
+      <canvas id="dd-chart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}{# end insights.total_closed >= 1 #}
+
+{% endblock %}
+
+
+{% block scripts %}
+{% if insights.total_closed >= 1 %}
+<script>
+(function() {
+  var MONO = "'JetBrains Mono', monospace";
+  var gridColor  = 'rgba(255,255,255,0.03)';
+  var borderColor = 'rgba(255,255,255,0.06)';
+  var tickColor  = '#444444';
+  var tooltipBg  = '#1a1a1a';
+
+  {% if insights.rr_scatter|length >= 3 %}
+  /* ── R:R Scatter ─────────────────────────────────────────────────────────── */
+  (function() {
+    var scatter = {{ insights.rr_scatter | tojson }};
+    var points = scatter.map(function(d) { return { x: d.promised_rr, y: d.realized_rr, label: d.symbol }; });
+    var colors = scatter.map(function(d) {
+      return d.outcome === 'win' ? 'rgba(0,212,170,0.8)' : 'rgba(255,69,69,0.8)';
+    });
+
+    /* Reference line y=x from 1 to 5 */
+    var refLine = [{ x: 1, y: 1 }, { x: 5, y: 5 }];
+
+    new Chart(document.getElementById('rr-chart').getContext('2d'), {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: 'Trades',
+            data: points,
+            pointBackgroundColor: colors,
+            pointBorderColor: 'transparent',
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+          {
+            label: 'Break-even line',
+            type: 'line',
+            data: refLine,
+            borderColor: 'rgba(255,255,255,0.12)',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: tooltipBg,
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            titleColor: '#444444',
+            bodyColor: '#e0e0e0',
+            bodyFont: { family: MONO, size: 12 },
+            titleFont: { family: MONO, size: 10 },
+            padding: 10,
+            callbacks: {
+              label: function(ctx) {
+                var d = ctx.raw;
+                var sym = scatter[ctx.dataIndex] ? scatter[ctx.dataIndex].symbol : '';
+                return (sym ? sym + ' · ' : '') + 'Promised: ' + (d.x||'').toFixed(2) + ' · Realized: ' + (d.y||'').toFixed(2);
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Promised R:R', color: tickColor, font: { family: MONO, size: 10 } },
+            grid: { color: gridColor },
+            border: { color: borderColor },
+            ticks: { color: tickColor, font: { family: MONO, size: 10 }, maxTicksLimit: 6 }
+          },
+          y: {
+            title: { display: true, text: 'Realized R:R', color: tickColor, font: { family: MONO, size: 10 } },
+            position: 'right',
+            grid: { color: gridColor },
+            border: { color: borderColor },
+            ticks: { color: tickColor, font: { family: MONO, size: 10 }, maxTicksLimit: 5 }
+          }
+        }
+      }
+    });
+  })();
+  {% endif %}
+
+  {% if insights.drawdown_curve and insights.drawdown_curve|length > 1 %}
+  /* ── Equity + Drawdown ───────────────────────────────────────────────────── */
+  (function() {
+    var curve = {{ insights.drawdown_curve | tojson }};
+    var labels   = curve.map(function(d) { var p = d.date.split('-'); return p[1] + '/' + p[2]; });
+    var equity   = curve.map(function(d) { return d.equity; });
+    var drawdown = curve.map(function(d) { return d.drawdown_pct; });
+
+    new Chart(document.getElementById('dd-chart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Equity',
+            data: equity,
+            borderColor: '#00d4aa',
+            borderWidth: 2,
+            backgroundColor: 'transparent',
+            fill: false,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHoverBackgroundColor: '#00d4aa',
+            yAxisID: 'yLeft',
+          },
+          {
+            label: 'Drawdown %',
+            data: drawdown,
+            borderColor: 'rgba(255,69,69,0.6)',
+            borderWidth: 1,
+            backgroundColor: 'rgba(255,69,69,0.08)',
+            fill: 'origin',
+            tension: 0.3,
+            pointRadius: 0,
+            yAxisID: 'yRight',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: tooltipBg,
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            titleColor: '#444444',
+            bodyColor: '#e0e0e0',
+            bodyFont: { family: MONO, size: 12 },
+            titleFont: { family: MONO, size: 10 },
+            padding: 10,
+            callbacks: {
+              label: function(ctx) {
+                if (ctx.datasetIndex === 0) return 'Equity: $' + ctx.parsed.y.toFixed(2);
+                return 'Drawdown: ' + ctx.parsed.y.toFixed(2) + '%';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            border: { color: borderColor },
+            ticks: { color: tickColor, font: { family: MONO, size: 10 }, maxTicksLimit: 7, maxRotation: 0 }
+          },
+          yLeft: {
+            position: 'left',
+            grid: { color: gridColor },
+            border: { color: borderColor },
+            ticks: { color: '#00d4aa', font: { family: MONO, size: 10 }, maxTicksLimit: 4, callback: function(v) { return '$' + v.toFixed(0); } }
+          },
+          yRight: {
+            position: 'right',
+            grid: { display: false },
+            border: { color: borderColor },
+            ticks: { color: '#ff4545', font: { family: MONO, size: 10 }, maxTicksLimit: 4, callback: function(v) { return v.toFixed(1) + '%'; } }
+          }
+        }
+      }
+    });
+  })();
+  {% endif %}
+
+})();
+</script>
+{% endif %}
 {% endblock %}
