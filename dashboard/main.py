@@ -61,8 +61,7 @@ async def logout():
 async def home(request: Request, _user: str = Depends(require_auth)):
     stats = queries.get_account_stats()
     active = queries.get_active_position()
-    return templates.TemplateResponse("home.html", {
-        "request":          request,
+    return templates.TemplateResponse(request, "home.html", {
         "stats":            stats,
         "active":           active,
         "username":         "SAAQIB",
