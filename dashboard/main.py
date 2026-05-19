@@ -7,12 +7,22 @@ Run locally:
 Environment variables (add to .env):
     DASHBOARD_PASSWORD=yourpassword   (required — no default)
 """
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse, Response
 
 from dashboard.auth import require_auth
+from dashboard import migrations
 
-app = FastAPI(title="SwingBot Dashboard", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    migrations.run()
+    yield
+
+
+app = FastAPI(title="SwingBot Dashboard", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 # ── Unauthenticated routes ────────────────────────────────────────────────────

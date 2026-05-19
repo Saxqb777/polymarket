@@ -78,7 +78,9 @@ def log_run(run_data: dict, db_path: str = config.DB_PATH) -> int:
         "run_date", "run_timestamp", "candidates_scanned", "candidates_passed",
         "decision", "symbol", "entry_price", "stop_loss", "target_price",
         "risk_reward", "shares", "position_value", "risk_amount",
-        "confidence", "rationale", "no_trade_reason", "is_paper",
+        "confidence", "rationale", "no_trade_reason",
+        "quality_tier", "target_move_pct", "is_premium", "meets_quality_bar",
+        "is_paper",
     ]
     values = [run_data.get(f) for f in fields]
     placeholders = ", ".join("?" * len(fields))

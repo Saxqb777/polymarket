@@ -31,7 +31,6 @@ def require_auth(credentials: HTTPBasicCredentials = Depends(_security)) -> str:
     Returns the username on success; raises 401 on failure.
     Uses secrets.compare_digest to prevent timing attacks.
     """
-    print(f"DEBUG LOGIN: username={repr(credentials.username)}, password={repr(credentials.password)}")
     user_ok = secrets.compare_digest(credentials.username.encode(), _USERNAME.encode())
     pass_ok = secrets.compare_digest(credentials.password.encode(), _PASSWORD.encode())
 

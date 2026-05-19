@@ -150,6 +150,10 @@ def run_pipeline(dry_run: bool = False) -> None:
         "confidence": result.get("confidence"),
         "rationale": result.get("rationale"),
         "no_trade_reason": result.get("no_trade_reason"),
+        "quality_tier": result.get("quality_tier"),
+        "target_move_pct": result.get("target_move_pct"),
+        "is_premium": result.get("is_premium"),
+        "meets_quality_bar": result.get("meets_quality_bar"),
         "is_paper": int(config.PAPER_TRADING),
         "telegram_sent": int(telegram_sent),
     }
