@@ -6,21 +6,68 @@
 
 ## 📍 Current Status
 
-**Phase:** Dashboard — Step 3 complete (database read layer)
-**Next step:** Dashboard Step 4 — base template + CSS (base.html + dashboard.css, Bloomberg Terminal aesthetic)
+**Phase:** Dashboard — Step 6.5 complete (live prices + full stub pages + analytics)
+**Next step:** Step 7 — TBD (Telegram alerts? Mobile polish? Deploy to Railway?)
 
 ---
 
 ## 📝 Log
 
+### 2026-05-20 — Dashboard Step 6.5: Live prices + bot/trades/insights pages
+
+**Live Prices (Part A)**
+- `dashboard/live_price.py`: Polygon primary + yfinance fallback, 30s cache, is_market_open(), get_price_or_none()
+- `/api/live-price/{symbol}` JSON endpoint, security-guarded to open positions only
+- Home page polls every 60s (pauses when tab hidden); updates LAST, Live P&L, progress rail dot, status bar POS %, hero equity, breakdown sub-line; 300ms mint/red flash on price change
+- Status bar NEXT SCAN now a live countdown ticking every minute (client-side JS)
+
+**Bot Status Page — /bot (Part B)**
+- `queries.get_bot_status()`: last run info, next Sunday 16:00 UTC, runtime env, version
+- `templates/bot.html`: ONLINE indicator, 3-section layout (Last Run / Next Scan / Config), countdown ticking per second
+- `⚡ MANUAL SCAN NOW` amber button with confirmation dialog → POST /bot/trigger-scan → runs full pipeline → HTMX swaps Last Run section with updated data + ✓ SCAN COMPLETE
+- `partials/bot_last_run.html`: HTMX partial for scan result swap
+
+**Trades History Page — /trades (Part C)**
+- `queries.get_all_trades_filtered()`: server-side tier + days filter, status filter in Python
+- `templates/trades.html`: Tier/Status/Days dropdowns (auto-submit), ticker search (client-side), clickable rows, ↓ CSV export
+- `GET /trades/export`: returns filtered trades as downloadable CSV
+
+**Insights Page — /insights (Part D)**
+- `queries.get_insights_data()`: win_rate_by_tier, win_rate_by_confidence, R:R scatter, 84-day calendar_data, 30-day drawdown_curve
+- `templates/insights.html`: graceful empty state; tier/confidence bars, R:R scatter (min 3 trades), 84-day calendar heatmap (CSS grid, mint/red gradient), equity+drawdown dual-axis chart
+
+**Settings + Edit-Close + Equity Math (Step 6.5 Part 1 — shipped earlier)**
+- `user_settings` SQLite table seeded at startup
+- /settings page: set starting capital, saves to DB
+- Edit-close HTMX form on trade detail State C
+- account_value = starting + closed_pnl; cash_position = account_value − open_cost
+- Hero breakdown: "Cash $0.12 · Open $269.88 in MCHP"
+
+### 2026-05-20 — Dashboard Step 6: Trade detail + action panel
+- `dashboard/commands.py`: mark_taken, mark_skipped, log_outcome, reopen_trade, unskip_trade
+- `templates/trade_detail.html`: full detail page (bot levels, rationale, no-trade reason)
+- `partials/action_panel.html`: 4-state HTMX machine (pending→open→closed→skipped), all transitions wired
+- `partials/take_form.html`, `skip_form.html`, `close_form.html`: inline forms
+- Fixed: home page showing actual_entry/shares; stub pages for nav links
+
+### 2026-05-19 — Dashboard Step 5: Full home dashboard
+- `templates/home.html`: hero (account value + delta pill), 4-col stats grid (Win Rate / Avg R:R / Best Week / You vs Bot), active position card (pos-cells, progress rail, thesis), 160px equity curve (Chart.js v4), trade log table
+- Fixed: TemplateResponse new Starlette signature (request as first arg); CSS specificity on MTD/POS colors; win rate / best week / you-vs-bot display logic; python-multipart dependency
+
+### 2026-05-19 — Dashboard Step 4: Base template + design system
+- `templates/base.html`: sticky status bar (LIVE/ACCT/MTD/POS/NEXT SCAN), header + nav, CDN fonts (Inter + JetBrains Mono), Chart.js v4, HTMX 1.9.10
+- `static/dashboard.css`: Bloomberg Terminal dark mode (--bg #0a0a0a, --mint #00d4aa, --red #ff4545), 800 lines of design tokens + component styles
+
 ### 2026-05-19 — Dashboard Step 3: Database read layer
-- `dashboard/migrations.py`: idempotent schema migrations; adds quality_tier, target_move_pct, is_premium, meets_quality_bar, taken, skip_reason etc. to runs; closed_method to trade_outcomes; runs at startup via FastAPI lifespan
-- `dashboard/queries.py`: all read helpers — account stats, active position, equity curve, trade list (paginated), trade detail, insights (tier/confidence/monthly breakdowns)
-- `dashboard/main.py`: wired migrations.run() via asynccontextmanager lifespan hook
-- `dashboard/auth.py`: removed temporary debug print added during auth bug investigation
-- `src/database.py`: log_run() now writes quality_tier, target_move_pct, is_premium, meets_quality_bar
-- `main.py`: passes those 4 quality fields from analyst result into run_data dict
-- `requirements.txt`: added jinja2>=3.1.0 (needed for Step 4 templates)
+- `dashboard/migrations.py`, `dashboard/queries.py`, wired into FastAPI lifespan
+- `src/database.py`: quality fields added; `main.py`: passes them from analyst result
+
+### 2026-05-15 — Dashboard Steps 1–2: Skeleton + Auth
+- FastAPI skeleton, HTTP Basic Auth, /health unauthenticated
+
+### 2026-05-15 — Bot complete and running live
+- All 10 bot modules, 101-ticker watchlist, Telegram working, R:R floor 2.5
+
 
 ### 2026-05-15 — Dashboard Step 2: HTTP Basic Auth
 - `dashboard/auth.py`: HTTPBasic dependency, username="saaqib", password from DASHBOARD_PASSWORD env var
