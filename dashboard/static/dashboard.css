@@ -963,3 +963,42 @@ a {
   height: 200px;
   position: relative;
 }
+
+/* ── Saved flash badge ───────────────────────────────────────────────────────── */
+@keyframes saved-pop {
+  0%   { opacity: 0; transform: translateY(-3px); }
+  15%  { opacity: 1; transform: translateY(0); }
+  75%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-3px); }
+}
+.saved-flash {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: saved-pop 2s ease forwards;
+  pointer-events: none;
+}
+
+/* ── Amber action button (for TRIM POSITION) ─────────────────────────────────── */
+.action-button-amber {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 14px 24px;
+  border: 1px solid var(--amber);
+  background: transparent;
+  color: var(--amber);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: background 0.15s;
+  border-radius: 0;
+}
+.action-button-amber:hover { background: var(--amber-glow); }

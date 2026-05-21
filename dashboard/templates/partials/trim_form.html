@@ -1,0 +1,55 @@
+<form hx-post="/trade/{{ run_id }}/trim"
+      hx-target="#action-panel"
+      hx-swap="innerHTML">
+
+  <div class="mono muted" style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:16px;">
+    Trim Position · {{ trade.symbol }}
+    {% if trade.actual_shares %}
+      · {{ "%.4f"|format(trade.actual_shares) }} shares remaining
+    {% endif %}
+  </div>
+
+  <div class="td-cells" style="margin-bottom: 20px;">
+
+    <div class="td-cell">
+      <label class="td-cell-label" for="trim-shares">Shares to Sell</label>
+      <input id="trim-shares" class="action-input" type="number" step="0.0001"
+             min="0.0001"
+             max="{{ trade.actual_shares or '' }}"
+             name="shares_sold"
+             placeholder="0.0000" required>
+    </div>
+
+    <div class="td-cell">
+      <label class="td-cell-label" for="trim-price">Exit Price</label>
+      <input id="trim-price" class="action-input" type="number" step="0.01"
+             name="exit_price"
+             placeholder="{{ '%.2f'|format(trade.actual_entry) if trade.actual_entry else '0.00' }}"
+             required>
+    </div>
+
+  </div>
+
+  <div style="margin-bottom: 16px;">
+    <label class="td-cell-label" for="trim-reason" style="display:block; margin-bottom:6px;">Reason (optional)</label>
+    <input id="trim-reason" class="action-input" type="text" name="reason"
+           placeholder="e.g. Took partial profit at +5%, holding rest"
+           style="width:100%;">
+  </div>
+
+  {% if trade.actual_entry %}
+  <div class="mono dim" style="font-size:11px; margin-bottom:16px; letter-spacing:0.04em;">
+    Entry · ${{ "%.2f"|format(trade.actual_entry) }} ·
+    <span class="muted">P&amp;L per share = exit − ${{ "%.2f"|format(trade.actual_entry) }}</span>
+  </div>
+  {% endif %}
+
+  <div class="action-buttons">
+    <button type="submit" class="action-button-amber">⊟ CONFIRM TRIM</button>
+    <button type="button" class="action-button-ghost"
+            hx-get="/trade/{{ run_id }}/close-form"
+            hx-target="#action-panel"
+            hx-swap="innerHTML">Cancel</button>
+  </div>
+
+</form>

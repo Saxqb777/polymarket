@@ -61,10 +61,16 @@ def get_account_stats() -> dict:
         wins   = sum(1 for r in outcomes if r["outcome"] == "WIN")
         losses = sum(1 for r in outcomes if r["outcome"] == "LOSS")
         completed = wins + losses
-        total_pnl = sum((r["pnl_dollars"] or 0) for r in outcomes
-                        if r["outcome"] in ("WIN", "LOSS"))
+        closed_pnl = sum((r["pnl_dollars"] or 0) for r in outcomes
+                         if r["outcome"] in ("WIN", "LOSS"))
 
-        # Month-to-date P&L
+        # Partial exit P&L (realized even while trade still open)
+        partial_total = conn.execute(
+            "SELECT COALESCE(SUM(pnl_dollars), 0) FROM partial_exits"
+        ).fetchone()[0] or 0
+        total_pnl = closed_pnl + partial_total
+
+        # Month-to-date P&L (closed trades + partial exits this month)
         first_of_month = date.today().replace(day=1).isoformat()
         mtd_rows = conn.execute("""
             SELECT to2.pnl_dollars
@@ -72,7 +78,10 @@ def get_account_stats() -> dict:
             JOIN runs r ON to2.run_id = r.id
             WHERE r.run_date >= ? AND to2.outcome IN ('WIN', 'LOSS')
         """, (first_of_month,)).fetchall()
-        mtd_pnl = sum((r["pnl_dollars"] or 0) for r in mtd_rows)
+        partial_mtd = conn.execute("""
+            SELECT COALESCE(SUM(pnl_dollars), 0) FROM partial_exits WHERE exit_date >= ?
+        """, (first_of_month,)).fetchone()[0] or 0
+        mtd_pnl = sum((r["pnl_dollars"] or 0) for r in mtd_rows) + partial_mtd
 
         # Total TRADE decisions
         total_trades = conn.execute(
@@ -193,11 +202,19 @@ def get_active_position() -> Optional[dict]:
             LIMIT 1
         """).fetchone()
 
-    if not row:
-        return None
+        if not row:
+            return None
+
+        trim_agg = conn.execute("""
+            SELECT COALESCE(SUM(shares_sold), 0) AS total_sold,
+                   COALESCE(SUM(pnl_dollars),  0) AS total_pnl
+            FROM partial_exits WHERE run_id = ?
+        """, (row["id"],)).fetchone()
 
     r = dict(row)
-    r["tier_badge"] = _fmt_tier(r.get("quality_tier"))
+    r["tier_badge"]     = _fmt_tier(r.get("quality_tier"))
+    r["trimmed_shares"] = round(trim_agg["total_sold"] or 0, 4)
+    r["trimmed_pnl"]    = round(trim_agg["total_pnl"]  or 0, 2)
 
     # Days held (from run_date to today)
     try:
@@ -227,19 +244,30 @@ def get_equity_curve(days: int = 30) -> list[dict]:
             GROUP BY to2.exit_date
             ORDER BY to2.exit_date
         """, (cutoff,)).fetchall()
+        partial_rows = conn.execute("""
+            SELECT exit_date, SUM(pnl_dollars) AS day_pnl
+            FROM partial_exits WHERE exit_date >= ?
+            GROUP BY exit_date
+        """, (cutoff,)).fetchall()
 
-    # Build a daily dict from the DB rows
+    # Merge both sources into daily P&L dict
     pnl_by_date = {r["exit_date"]: (r["day_pnl"] or 0) for r in rows}
+    for r in partial_rows:
+        pnl_by_date[r["exit_date"]] = pnl_by_date.get(r["exit_date"], 0) + (r["day_pnl"] or 0)
 
-    # Also get total P&L before the window to establish correct starting value
+    # P&L before the window (both sources)
     with _conn() as conn:
-        pre_pnl_row = conn.execute("""
+        pre_closed = conn.execute("""
             SELECT COALESCE(SUM(pnl_dollars), 0)
             FROM trade_outcomes
             WHERE outcome IN ('WIN', 'LOSS') AND exit_date < ?
-        """, (cutoff,)).fetchone()[0]
+        """, (cutoff,)).fetchone()[0] or 0
+        pre_partial = conn.execute("""
+            SELECT COALESCE(SUM(pnl_dollars), 0)
+            FROM partial_exits WHERE exit_date < ?
+        """, (cutoff,)).fetchone()[0] or 0
 
-    running = get_user_settings()["starting_capital"] + (pre_pnl_row or 0)
+    running = get_user_settings()["starting_capital"] + pre_closed + pre_partial
     curve = []
     for i in range(days + 1):
         d = (date.today() - timedelta(days=days - i)).isoformat()
@@ -264,9 +292,15 @@ def get_recent_trades(limit: int = 10) -> list[dict]:
                 r.confidence, r.quality_tier, r.target_move_pct, r.is_premium,
                 r.decision, r.no_trade_reason,
                 r.taken, r.skip_reason,
-                to2.outcome, to2.exit_price, to2.pnl_dollars, to2.pnl_pct
+                to2.outcome, to2.exit_price,
+                to2.pnl_dollars AS close_pnl, to2.pnl_pct,
+                COALESCE(pe_agg.partial_pnl, 0) AS partial_pnl
             FROM runs r
             LEFT JOIN trade_outcomes to2 ON r.id = to2.run_id
+            LEFT JOIN (
+                SELECT run_id, SUM(pnl_dollars) AS partial_pnl
+                FROM partial_exits GROUP BY run_id
+            ) pe_agg ON r.id = pe_agg.run_id
             ORDER BY r.id DESC
             LIMIT ?
         """, (limit,)).fetchall()
@@ -274,39 +308,9 @@ def get_recent_trades(limit: int = 10) -> list[dict]:
     trades = []
     for row in rows:
         t = dict(row)
-        t["tier_badge"] = _fmt_tier(t.get("quality_tier"))
-        t["status"] = _derive_status(t)
-        trades.append(t)
-    return trades
-
-
-def get_all_trades(offset: int = 0, limit: int = 50,
-                   decision_filter: Optional[str] = None) -> list[dict]:
-    """Paginated, optionally filtered trade list for the history page."""
-    where = "WHERE r.decision = ?" if decision_filter else ""
-    params: list = ([decision_filter] if decision_filter else []) + [limit, offset]
-
-    with _conn() as conn:
-        rows = conn.execute(f"""
-            SELECT
-                r.id, r.run_date, r.symbol,
-                r.entry_price, r.stop_loss, r.target_price, r.risk_reward,
-                r.confidence, r.quality_tier, r.target_move_pct,
-                r.decision, r.no_trade_reason,
-                r.taken, r.skip_reason,
-                to2.outcome, to2.pnl_dollars
-            FROM runs r
-            LEFT JOIN trade_outcomes to2 ON r.id = to2.run_id
-            {where}
-            ORDER BY r.id DESC
-            LIMIT ? OFFSET ?
-        """, params).fetchall()
-
-    trades = []
-    for row in rows:
-        t = dict(row)
-        t["tier_badge"] = _fmt_tier(t.get("quality_tier"))
-        t["status"] = _derive_status(t)
+        t["pnl_dollars"] = round((t.get("close_pnl") or 0) + (t.get("partial_pnl") or 0), 2) or None
+        t["tier_badge"]  = _fmt_tier(t.get("quality_tier"))
+        t["status"]      = _derive_status(t)
         trades.append(t)
     return trades
 
@@ -314,7 +318,7 @@ def get_all_trades(offset: int = 0, limit: int = 50,
 # ── Trade detail ──────────────────────────────────────────────────────────────
 
 def get_trade_by_id(run_id: int) -> Optional[dict]:
-    """Full detail for one trade, including outcome and user notes."""
+    """Full detail for one trade, including outcome, partial exits, and user notes."""
     with _conn() as conn:
         row = conn.execute("""
             SELECT
@@ -327,12 +331,20 @@ def get_trade_by_id(run_id: int) -> Optional[dict]:
             WHERE r.id = ?
         """, (run_id,)).fetchone()
 
-    if not row:
-        return None
+        if not row:
+            return None
+
+        pe_rows = conn.execute("""
+            SELECT id, exit_date, shares_sold, exit_price, pnl_dollars, pnl_pct, reason
+            FROM partial_exits WHERE run_id = ? ORDER BY exit_date, id
+        """, (run_id,)).fetchall()
 
     t = dict(row)
-    t["tier_badge"] = _fmt_tier(t.get("quality_tier"))
-    t["status"] = _derive_status(t)
+    t["tier_badge"]        = _fmt_tier(t.get("quality_tier"))
+    t["status"]            = _derive_status(t)
+    t["partial_exits"]     = [dict(p) for p in pe_rows]
+    t["partial_exits_pnl"] = round(sum(p["pnl_dollars"] for p in t["partial_exits"]), 2)
+    t["total_pnl"]         = round((t.get("pnl_dollars") or 0) + t["partial_exits_pnl"], 2)
     return t
 
 
@@ -621,9 +633,15 @@ def get_all_trades_filtered(
                 r.confidence, r.quality_tier, r.target_move_pct,
                 r.decision, r.no_trade_reason,
                 r.taken, r.skip_reason,
-                to2.outcome, to2.exit_price, to2.pnl_dollars, to2.pnl_pct
+                to2.outcome, to2.exit_price,
+                to2.pnl_dollars AS close_pnl, to2.pnl_pct,
+                COALESCE(pe_agg.partial_pnl, 0) AS partial_pnl
             FROM runs r
             LEFT JOIN trade_outcomes to2 ON r.id = to2.run_id
+            LEFT JOIN (
+                SELECT run_id, SUM(pnl_dollars) AS partial_pnl
+                FROM partial_exits GROUP BY run_id
+            ) pe_agg ON r.id = pe_agg.run_id
             {where}
             ORDER BY r.id DESC
         """, params).fetchall()
@@ -631,9 +649,9 @@ def get_all_trades_filtered(
     trades = []
     for row in rows:
         t = dict(row)
-        t["tier_badge"] = _fmt_tier(t.get("quality_tier"))
-        t["status"]     = _derive_status(t)
-        # Client-side status filter applied here
+        t["pnl_dollars"] = round((t.get("close_pnl") or 0) + (t.get("partial_pnl") or 0), 2) or None
+        t["tier_badge"]  = _fmt_tier(t.get("quality_tier"))
+        t["status"]      = _derive_status(t)
         if status and t["status"] != status:
             continue
         trades.append(t)

@@ -7,7 +7,11 @@
    1. HERO
    ══════════════════════════════════════════════════════════════════════════════ #}
 <section class="hero">
-  <div class="hero-label">Account Value · USD</div>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+    <div class="hero-label" style="margin-bottom:0;">Account Value · USD</div>
+    <a href="/" class="mono muted" style="font-size:11px; letter-spacing:0.08em; transition:color .15s;"
+       onmouseover="this.style.color='var(--text-dim)'" onmouseout="this.style.color='var(--text-muted)'">↻ REFRESH</a>
+  </div>
   <div class="hero-number">
     <span class="hero-dollar">$</span>
     <span id="hero-amount" class="hero-amount">{{ "{:,.2f}".format(stats.account_value) }}</span>
@@ -139,6 +143,12 @@
           {% else %}Standard tier
           {% endif %}
         </div>
+        {% if active.trimmed_shares and active.trimmed_shares > 0 %}
+        <div class="mono" style="font-size:11px; color:var(--amber); margin-top:6px; letter-spacing:0.06em;">
+          ⊟ Trimmed {{ "%.4f"|format(active.trimmed_shares) }} shares ·
+          {% if active.trimmed_pnl >= 0 %}+{% endif %}${{ "%.2f"|format(active.trimmed_pnl) }} realized
+        </div>
+        {% endif %}
         <div class="pos-cells">
           {# Row 1 #}
           <div class="pos-cell">

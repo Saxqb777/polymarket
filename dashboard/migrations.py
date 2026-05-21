@@ -71,6 +71,22 @@ def run(db_path: str = config.DB_PATH) -> None:
             VALUES (1, ?, datetime('now'))
         """, (config.ACCOUNT_CAPITAL,))
 
+        # ── partial_exits table ───────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partial_exits (
+                id          INTEGER PRIMARY KEY,
+                run_id      INTEGER NOT NULL,
+                exit_date   TEXT    NOT NULL,
+                shares_sold REAL    NOT NULL,
+                exit_price  REAL    NOT NULL,
+                pnl_dollars REAL    NOT NULL,
+                pnl_pct     REAL    NOT NULL,
+                reason      TEXT,
+                created_at  TEXT    NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES runs(id)
+            )
+        """)
+
         conn.commit()
 
     finally:

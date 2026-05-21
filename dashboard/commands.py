@@ -100,6 +100,40 @@ def unskip_trade(run_id: int) -> Optional[dict]:
     return _get_trade(run_id)
 
 
+def trim_position(run_id: int, shares_sold: float,
+                  exit_price: float, reason: Optional[str] = None) -> Optional[dict]:
+    """Sell a portion of shares, log the realized P&L, update remaining share count."""
+    trade = _get_trade(run_id)
+    if not trade:
+        return None
+
+    entry     = trade.get("actual_entry") or trade.get("entry_price") or 0.0
+    remaining = trade.get("actual_shares") or 0.0
+
+    if shares_sold <= 0 or shares_sold > remaining:
+        return None
+
+    pnl_dollars = round((exit_price - entry) * shares_sold, 2)
+    pnl_pct     = round((exit_price - entry) / entry * 100, 2) if entry else 0.0
+
+    with _conn() as conn:
+        conn.execute("""
+            INSERT INTO partial_exits
+              (run_id, exit_date, shares_sold, exit_price, pnl_dollars, pnl_pct, reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        """, (
+            run_id, date.today().isoformat(),
+            shares_sold, exit_price,
+            pnl_dollars, pnl_pct,
+            reason or None,
+        ))
+        conn.execute(
+            "UPDATE runs SET actual_shares = ? WHERE id = ?",
+            (round(remaining - shares_sold, 8), run_id),
+        )
+    return _get_trade(run_id)
+
+
 def edit_outcome(run_id: int, exit_price: float, pnl_dollars: float,
                  outcome: str, notes: Optional[str] = None) -> Optional[dict]:
     """Correct an already-closed trade's exit price and P&L."""

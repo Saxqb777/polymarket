@@ -1,3 +1,19 @@
+{# OOB update for the state badge in the section header — updates on every POST action #}
+<span id="action-state-badge" hx-swap-oob="outerHTML">
+  {% if trade_state == 'open' %}<span id="action-state-badge" class="amber">● OPEN</span>
+  {% elif trade_state == 'closed' %}<span id="action-state-badge" class="dim">● CLOSED</span>
+  {% elif trade_state == 'skipped' %}<span id="action-state-badge" class="muted">● SKIPPED</span>
+  {% else %}<span id="action-state-badge" class="muted">● PENDING</span>
+  {% endif %}
+</span>
+
+{# ✓ Saved badge — only appears after a POST action #}
+{% if saved %}
+<div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+  <span class="saved-flash">✓ SAVED</span>
+</div>
+{% endif %}
+
 {% if trade_state == 'pending' %}
 {# ── State A: no action yet ─────────────────────────────────────────────────── #}
 <div class="action-buttons">
@@ -19,23 +35,33 @@
     <div class="td-cell-value mint">{% if trade.actual_entry %}${{ "%.2f"|format(trade.actual_entry) }}{% else %}—{% endif %}</div>
   </div>
   <div class="td-cell">
-    <div class="td-cell-label">Shares</div>
-    <div class="td-cell-value">{% if trade.actual_shares %}{{ "%.2f"|format(trade.actual_shares) }}{% else %}—{% endif %}</div>
+    <div class="td-cell-label">Shares Remaining</div>
+    <div class="td-cell-value">{% if trade.actual_shares %}{{ "%.4f"|format(trade.actual_shares) }}{% else %}—{% endif %}</div>
   </div>
   <div class="td-cell">
     <div class="td-cell-label">Last</div>
     <div class="td-cell-value muted">—</div>
   </div>
   <div class="td-cell">
-    <div class="td-cell-label">Live P&L</div>
+    <div class="td-cell-label">Live P&amp;L</div>
     <div class="td-cell-value muted">—</div>
   </div>
 </div>
+{% if trade.partial_exits and trade.partial_exits|length > 0 %}
+<div class="mono" style="font-size:11px; color:var(--mint); margin-bottom:14px; letter-spacing:0.06em;">
+  ⊟ {{ trade.partial_exits|length }} trim{{ "s" if trade.partial_exits|length > 1 }} ·
+  +${{ "%.2f"|format(trade.partial_exits_pnl) }} realized so far
+</div>
+{% endif %}
 <div class="action-buttons">
   <button class="action-button-danger"
           hx-get="/trade/{{ run_id }}/close-form"
           hx-target="#action-panel"
           hx-swap="innerHTML">✕ CLOSE TRADE</button>
+  <button class="action-button-amber"
+          hx-get="/trade/{{ run_id }}/trim-form"
+          hx-target="#action-panel"
+          hx-swap="innerHTML">⊟ TRIM POSITION</button>
   <button class="action-button-ghost"
           hx-get="/trade/{{ run_id }}/take-form"
           hx-target="#action-panel"
@@ -54,17 +80,18 @@
     <div class="td-cell-value">{% if trade.exit_price %}${{ "%.2f"|format(trade.exit_price) }}{% else %}—{% endif %}</div>
   </div>
   <div class="td-cell">
-    <div class="td-cell-label">P&L $</div>
-    {% if trade.pnl_dollars is not none %}
-      <div class="td-cell-value {% if trade.pnl_dollars >= 0 %}mint{% else %}red{% endif %}">
-        {% if trade.pnl_dollars >= 0 %}+{% else %}-{% endif %}${{ "%.2f"|format(trade.pnl_dollars|abs) }}
+    <div class="td-cell-label">{% if trade.partial_exits_pnl %}Final P&amp;L{% else %}P&amp;L ${% endif %}</div>
+    {% set display_pnl = trade.total_pnl if trade.partial_exits_pnl else trade.pnl_dollars %}
+    {% if display_pnl is not none %}
+      <div class="td-cell-value {% if display_pnl >= 0 %}mint{% else %}red{% endif %}">
+        {% if display_pnl >= 0 %}+{% else %}-{% endif %}${{ "%.2f"|format(display_pnl|abs) }}
       </div>
     {% else %}
       <div class="td-cell-value muted">—</div>
     {% endif %}
   </div>
   <div class="td-cell">
-    <div class="td-cell-label">P&L %</div>
+    <div class="td-cell-label">P&amp;L %</div>
     {% if trade.pnl_pct is not none %}
       <div class="td-cell-value {% if trade.pnl_pct >= 0 %}mint{% else %}red{% endif %}">
         {% if trade.pnl_pct >= 0 %}+{% endif %}{{ "%.2f"|format(trade.pnl_pct) }}%

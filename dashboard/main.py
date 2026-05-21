@@ -55,12 +55,13 @@ def _trade_state(trade: dict) -> str:
     return "pending"
 
 
-def _trade_ctx(trade: dict, run_id: int) -> dict:
+def _trade_ctx(trade: dict, run_id: int, saved: bool = False) -> dict:
     """Context dict shared by all action-panel partial renders."""
     return {
         "trade":       trade,
         "run_id":      run_id,
         "trade_state": _trade_state(trade),
+        "saved":       saved,
     }
 
 
@@ -235,7 +236,7 @@ async def post_take(run_id: int, request: Request,
                     _user: str = Depends(require_auth)):
     trade = commands.mark_taken(run_id, actual_entry, actual_shares, notes or None)
     return templates.TemplateResponse(request, "partials/action_panel.html",
-                                      _trade_ctx(trade, run_id))
+                                      _trade_ctx(trade, run_id, saved=True))
 
 
 @app.post("/trade/{run_id}/skip")
@@ -244,7 +245,7 @@ async def post_skip(run_id: int, request: Request,
                     _user: str = Depends(require_auth)):
     trade = commands.mark_skipped(run_id, skip_reason or None)
     return templates.TemplateResponse(request, "partials/action_panel.html",
-                                      _trade_ctx(trade, run_id))
+                                      _trade_ctx(trade, run_id, saved=True))
 
 
 @app.post("/trade/{run_id}/close")
@@ -256,7 +257,7 @@ async def post_close(run_id: int, request: Request,
                      _user: str = Depends(require_auth)):
     trade = commands.log_outcome(run_id, exit_price, outcome, closed_method, notes or None)
     return templates.TemplateResponse(request, "partials/action_panel.html",
-                                      _trade_ctx(trade, run_id))
+                                      _trade_ctx(trade, run_id, saved=True))
 
 
 @app.post("/trade/{run_id}/reopen")
@@ -264,7 +265,7 @@ async def post_reopen(run_id: int, request: Request,
                       _user: str = Depends(require_auth)):
     trade = commands.reopen_trade(run_id)
     return templates.TemplateResponse(request, "partials/action_panel.html",
-                                      _trade_ctx(trade, run_id))
+                                      _trade_ctx(trade, run_id, saved=True))
 
 
 @app.post("/trade/{run_id}/unskip")
@@ -272,7 +273,31 @@ async def post_unskip(run_id: int, request: Request,
                       _user: str = Depends(require_auth)):
     trade = commands.unskip_trade(run_id)
     return templates.TemplateResponse(request, "partials/action_panel.html",
-                                      _trade_ctx(trade, run_id))
+                                      _trade_ctx(trade, run_id, saved=True))
+
+
+# ── Trim position endpoints ───────────────────────────────────────────────────
+
+@app.get("/trade/{run_id}/trim-form")
+async def trim_form(run_id: int, request: Request, _user: str = Depends(require_auth)):
+    trade = queries.get_trade_by_id(run_id)
+    if not trade:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "partials/trim_form.html",
+                                      {"trade": trade, "run_id": run_id})
+
+
+@app.post("/trade/{run_id}/trim")
+async def post_trim(run_id: int, request: Request,
+                    shares_sold: float = Form(...),
+                    exit_price:  float = Form(...),
+                    reason:      str   = Form(""),
+                    _user: str = Depends(require_auth)):
+    trade = commands.trim_position(run_id, shares_sold, exit_price, reason or None)
+    if not trade:
+        raise HTTPException(status_code=400, detail="Invalid trim — check shares and price")
+    return templates.TemplateResponse(request, "partials/action_panel.html",
+                                      _trade_ctx(trade, run_id, saved=True))
 
 
 # ── Edit-close HTMX endpoints ─────────────────────────────────────────────────
@@ -295,7 +320,7 @@ async def post_edit_close(run_id: int, request: Request,
                           _user: str = Depends(require_auth)):
     trade = commands.edit_outcome(run_id, exit_price, pnl_dollars, outcome, notes or None)
     return templates.TemplateResponse(request, "partials/action_panel.html",
-                                      _trade_ctx(trade, run_id))
+                                      _trade_ctx(trade, run_id, saved=True))
 
 
 # ── Settings page ─────────────────────────────────────────────────────────────

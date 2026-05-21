@@ -92,14 +92,57 @@
   <div class="section">
     <div class="section-header">
       <span>Your Action</span>
-      {% if trade_state == 'open' %}<span class="amber">● OPEN</span>
-      {% elif trade_state == 'closed' %}<span class="dim">● CLOSED</span>
-      {% elif trade_state == 'skipped' %}<span class="muted">● SKIPPED</span>
-      {% else %}<span class="muted">● PENDING</span>
+      {% if trade_state == 'open' %}<span id="action-state-badge" class="amber">● OPEN</span>
+      {% elif trade_state == 'closed' %}<span id="action-state-badge" class="dim">● CLOSED</span>
+      {% elif trade_state == 'skipped' %}<span id="action-state-badge" class="muted">● SKIPPED</span>
+      {% else %}<span id="action-state-badge" class="muted">● PENDING</span>
       {% endif %}
     </div>
-    <div id="action-panel" class="block">
+    <div id="action-panel" class="block" style="position:relative;">
       {% include "partials/action_panel.html" %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Partial exits history ────────────────────────────────────────────────── #}
+  {% if trade.partial_exits and trade.partial_exits|length > 0 %}
+  <div class="section" id="partial-exits-section">
+    <div class="section-header">
+      <span>Partial Exits</span>
+      <span class="mint mono">
+        {{ trade.partial_exits|length }} trim{{ "s" if trade.partial_exits|length > 1 }} ·
+        {% if trade.partial_exits_pnl >= 0 %}+{% endif %}${{ "%.2f"|format(trade.partial_exits_pnl) }} realized
+      </span>
+    </div>
+    <div style="border:1px solid var(--border); overflow:hidden;">
+      <table class="trade-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Shares Sold</th>
+            <th>Exit Price</th>
+            <th class="th-right">P&amp;L $</th>
+            <th class="th-right">P&amp;L %</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pe in trade.partial_exits %}
+          <tr>
+            <td class="td-date">{{ pe.exit_date }}</td>
+            <td class="td-mono">{{ "%.4f"|format(pe.shares_sold) }}</td>
+            <td class="td-mono">${{ "%.2f"|format(pe.exit_price) }}</td>
+            <td class="td-right td-mono {% if pe.pnl_dollars >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
+              {% if pe.pnl_dollars >= 0 %}+{% else %}-{% endif %}${{ "%.2f"|format(pe.pnl_dollars|abs) }}
+            </td>
+            <td class="td-right td-mono {% if pe.pnl_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
+              {% if pe.pnl_pct >= 0 %}+{% endif %}{{ "%.2f"|format(pe.pnl_pct) }}%
+            </td>
+            <td class="td-dim" style="font-size:12px;">{{ pe.reason or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
   {% endif %}
