@@ -8,3 +8,7 @@ restartPolicyType = "never"
 [[cron]]
 schedule = "0 16 */2 * *"   # Every 2 days at 16:00 UTC = 20:00 Gulf (UTC+4)
 command = "python main.py --now"
+
+[[cron]]
+schedule = "0 21 * * 1-5"   # Weekdays 21:00 UTC (after US close) — check open trades
+command = "python main.py --monitor"

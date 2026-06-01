@@ -6,12 +6,42 @@
 
 ## 📍 Current Status
 
-**Phase:** Engine Upgrade v2 — "pump it up" round 1 shipped
-**Next step:** Verify a live run on Railway (Opus brain + regime + Finnhub signals), then decide round 2 (see roadmap in chat)
+**Phase:** Engine Upgrade v2 — rounds 1 & 2 shipped (solid-trades package)
+**Next step:** Live verify on Railway, then run `python scripts/backtest.py` to sanity-check the mechanical rules
 
 ---
 
 ## 📝 Log
+
+### 2026-06-01 — Engine Upgrade v2 round 2: solid-trades package
+
+**Selection edge**
+- `src/technicals.py`: added ADX (trend strength) — +DI/-DI; flags STRONG (≥25) vs CHOPPY (<20)
+- `src/scanner.py`: relative strength vs SPY — fetches benchmark once, scores each stock on 60-day outperformance (up to +20 pts so leaders rise to the top 10)
+- Analyst prompt now shows RS + ADX per candidate and is told to prefer leaders / avoid chop
+
+**Self-learning memory (new `src/memory.py`)**
+- Reads last ~10 CLOSED trades (joined with their original setup) + win rate
+- Injects a "YOUR RECENT TRACK RECORD" block into the analyst prompt so the brain learns from its wins/losses. Empty until trades close.
+
+**Auto-monitor open positions (new `src/monitor.py`, `main.py --monitor`)**
+- Finds taken-but-unclosed trades, pulls bars since entry, detects stop/target hit chronologically (stop assumed first if same bar — conservative)
+- Auto-logs outcome (closed_method auto-stop/auto-target) + Telegram alert
+- Railway: second cron `0 21 * * 1-5` (weekdays after US close)
+- `main.py` now runs dashboard migrations on startup so monitor's columns always exist
+
+**Deep thinking ("take 5+ min, find the best")**
+- ANALYST_THINKING_BUDGET 2500 → 12000, MAX_TOKENS 16000, client timeout 900s
+- Analyst call now STREAMS (`messages.stream` + get_final_message) so long deep-thinking calls never time out
+- Prompt tells the brain to take its time and be methodical
+
+**Backtest harness (new `scripts/backtest.py`)**
+- Replays the mechanical selection + ATR stop/target rules over history → win rate, expectancy (R)
+- HONEST CAVEAT baked in: backtests the plumbing, NOT Claude's judgement. Sanity check, not proof of edge.
+
+**Deps:** anthropic pinned >=0.49.0 (thinking + streaming)
+
+**Not yet verified live** — container has no API keys; all modules syntax-clean, watchlist verified (146, 0 dupes)
 
 ### 2026-06-01 — Engine Upgrade v2: cadence + Opus brain + regime + Wall St signals
 

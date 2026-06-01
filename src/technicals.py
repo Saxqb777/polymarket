@@ -42,6 +42,41 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return true_range.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
+def _adx(df: pd.DataFrame, period: int = 14) -> tuple[float, float, float]:
+    """
+    Average Directional Index — measures TREND STRENGTH (not direction).
+      ADX > 25  → strong trend (good for swing entries)
+      ADX < 20  → choppy / rangebound (avoid)
+    Returns (adx, plus_di, minus_di) as floats for the latest bar.
+    """
+    high, low, close = df["high"], df["low"], df["close"]
+    up_move = high.diff()
+    down_move = -low.diff()
+
+    plus_dm = ((up_move > down_move) & (up_move > 0)) * up_move
+    minus_dm = ((down_move > up_move) & (down_move > 0)) * down_move
+
+    prev_close = close.shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
+
+    atr = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=1 / period, min_periods=period, adjust=False).mean() / atr
+    minus_di = 100 * minus_dm.ewm(alpha=1 / period, min_periods=period, adjust=False).mean() / atr
+
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    adx = dx.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+
+    def _last(s: pd.Series) -> float:
+        v = s.iloc[-1]
+        return float(v) if pd.notna(v) else 0.0
+
+    return _last(adx), _last(plus_di), _last(minus_di)
+
+
 def _macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
     """Returns (macd_line, signal_line, histogram)."""
     ema_fast = _ema(close, fast)
@@ -169,6 +204,9 @@ def compute_all(symbol: str, df: pd.DataFrame) -> dict:
         atr_val = float(_atr(df, config.ATR_PERIOD).iloc[-1])
         atr_pct = round((atr_val / last_close) * 100, 2) if last_close > 0 else 0.0
 
+        # ADX — trend strength
+        adx_val, plus_di, minus_di = _adx(df, config.ATR_PERIOD)
+
         # MACD
         macd_line, signal_line, histogram = _macd(close)
         macd_line_val = float(macd_line.iloc[-1])
@@ -212,6 +250,9 @@ def compute_all(symbol: str, df: pd.DataFrame) -> dict:
             "ma200": round(ma200, 2),
             "atr": round(atr_val, 2),
             "atr_pct": atr_pct,
+            "adx": round(adx_val, 1),
+            "plus_di": round(plus_di, 1),
+            "minus_di": round(minus_di, 1),
             "macd_line": round(macd_line_val, 3),
             "macd_histogram": round(macd_histogram_val, 3),
             "bb_upper": round(bb_upper_val, 2),

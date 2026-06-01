@@ -18,7 +18,7 @@ import structlog
 import config
 from src import database, scanner, earnings, technicals, telegram_bot
 from src import news as news_mod
-from src import analyst, trade_plan, regime as regime_mod, fundamentals
+from src import analyst, trade_plan, regime as regime_mod, fundamentals, memory, monitor
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 
@@ -112,9 +112,12 @@ def run_pipeline(dry_run: bool = False) -> None:
     regime = regime_mod.get_market_regime()
     log.info("market_regime", regime=regime.get("regime"), score=regime.get("score"))
 
+    # ── Step 4c: self-learning track record ──────────────────────────────────
+    track_record = memory.build_track_record_block(limit=10)
+
     # ── Step 5: Claude analysis (Opus 4.8 + extended thinking) ───────────────
     log.info("calling_analyst", candidates=len(enriched), model=config.ANALYST_MODEL)
-    result = analyst.analyze(enriched, regime)
+    result = analyst.analyze(enriched, regime, track_record)
 
     decision = result["decision"]
     symbol = result.get("symbol")
@@ -226,14 +229,32 @@ def main() -> None:
                         help="Run full pipeline but print message instead of sending")
     parser.add_argument("--test", action="store_true",
                         help="Send a Telegram test ping and exit")
+    parser.add_argument("--monitor", action="store_true",
+                        help="Check open positions for stop/target hits, log + alert, then exit")
     args = parser.parse_args()
 
     # Init DB on every startup
     database.init_db()
+    # Ensure dashboard/tracking columns exist too (taken, actual_entry, …) so the
+    # bot works even if it starts before the dashboard service has migrated.
+    try:
+        from dashboard import migrations as _migrations
+        _migrations.run()
+    except Exception as e:
+        log.warning("schema_migration_skipped", error=str(e))
 
     if args.test:
         ok = telegram_bot.test_telegram()
         sys.exit(0 if ok else 1)
+
+    if args.monitor:
+        try:
+            hits = monitor.check_positions(dry_run=args.dry_run)
+            log.info("monitor_complete", hits=len(hits))
+        except Exception as e:
+            log.error("monitor_crashed", error=str(e), exc_info=True)
+            sys.exit(1)
+        return
 
     if args.now or args.dry_run:
         try:

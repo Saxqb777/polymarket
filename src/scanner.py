@@ -43,7 +43,19 @@ def fetch_ohlcv(symbol: str, days: int = config.LOOKBACK_DAYS) -> pd.DataFrame:
     return df
 
 
-def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
+def _period_return(close: pd.Series, period: int) -> Optional[float]:
+    """Percentage return over `period` trading days, or None if not enough data."""
+    if len(close) <= period:
+        return None
+    past = float(close.iloc[-period - 1])
+    now = float(close.iloc[-1])
+    if past <= 0:
+        return None
+    return (now - past) / past * 100.0
+
+
+def compute_score(symbol: str, df: pd.DataFrame,
+                  benchmark_return: Optional[float] = None) -> Optional[dict]:
     """
     Score a stock for swing trade candidacy. Returns None if any hard filter fails.
 
@@ -53,6 +65,7 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
       RSI in sweet spot (45–65):        20 pts
       Price within 3% of 20-day MA:     20 pts
       20-day MA slope (5-day gradient): 15 pts
+      Relative strength vs SPY (bonus): up to 20 pts
     """
     try:
         if len(df) < config.MA_TREND:
@@ -108,6 +121,15 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
         ma20_slope = (ma20 - ma20_5d_ago) / ma20_5d_ago if ma20_5d_ago > 0 else 0.0
         score += min(max(ma20_slope / 0.01, 0.0), 1.0) * 15
 
+        # ── Relative strength vs benchmark (SPY) ──────────────────────────────
+        stock_return = _period_return(close, config.RS_PERIOD)
+        rel_strength = None
+        if stock_return is not None and benchmark_return is not None:
+            rel_strength = round(stock_return - benchmark_return, 2)
+            # +10pp outperformance → full 20 pts; clamp at 0 below RS_MIN_PCT
+            if rel_strength > config.RS_MIN_PCT:
+                score += min(max(rel_strength / 10.0, 0.0), 1.0) * 20
+
         return {
             "symbol": symbol,
             "score": round(score, 2),
@@ -118,6 +140,8 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
             "above_50ma": last_close > ma50,
             "ma20": round(ma20, 2),
             "ma20_slope": round(ma20_slope, 4),
+            "rel_strength": rel_strength,
+            "stock_return_60d": round(stock_return, 2) if stock_return is not None else None,
             "price_zone": price_zone,
         }
 
@@ -126,12 +150,24 @@ def compute_score(symbol: str, df: pd.DataFrame) -> Optional[dict]:
         return None
 
 
-def _score_symbol(symbol: str) -> Optional[dict]:
+def _score_symbol(symbol: str, benchmark_return: Optional[float] = None) -> Optional[dict]:
     try:
         df = fetch_ohlcv(symbol)
-        return compute_score(symbol, df)
+        return compute_score(symbol, df, benchmark_return)
     except Exception as e:
         logger.warning("Skipping %s — %s", symbol, e)
+        return None
+
+
+def _benchmark_return() -> Optional[float]:
+    """Fetch SPY and compute its RS_PERIOD return — the bar each stock must beat."""
+    try:
+        df = fetch_ohlcv(config.RS_BENCHMARK)
+        ret = _period_return(df["close"], config.RS_PERIOD)
+        logger.info("Benchmark %s %d-day return: %s%%", config.RS_BENCHMARK, config.RS_PERIOD, ret)
+        return ret
+    except Exception as e:
+        logger.warning("Benchmark fetch failed (%s) — relative strength disabled this run", e)
         return None
 
 
@@ -139,8 +175,10 @@ def scan_watchlist(watchlist: list[str]) -> list[dict]:
     """Score all watchlist symbols in parallel, return top SCANNER_TOP_N by score."""
     results = []
 
+    benchmark_return = _benchmark_return()
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {pool.submit(_score_symbol, sym): sym for sym in watchlist}
+        futures = {pool.submit(_score_symbol, sym, benchmark_return): sym for sym in watchlist}
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
             if result is not None:

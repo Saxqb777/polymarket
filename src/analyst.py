@@ -40,6 +40,8 @@ You are given the current broad-market regime (RISK_ON / NEUTRAL / RISK_OFF) com
 ## Using the data you are given
 Each candidate comes with: price/trend/RSI, moving averages, ATR, MACD, Bollinger bands, support/resistance, the last 10 daily candles, news sentiment with headlines, and Wall Street analyst signals (recommendation consensus + price target).
 - Lead with PRICE ACTION and TECHNICALS — the candles, trend, levels, and risk/reward define the trade. This is a technical swing, not a fundamentals bet.
+- RELATIVE STRENGTH: prefer stocks outperforming SPY (positive RS). Leaders continue to lead; avoid laggards making new relative lows unless it's a clean oversold bounce with a catalyst.
+- ADX (trend strength): ADX ≥ 25 = a real trend you can swing. ADX < 20 = choppy/rangebound — entries there often chop you out; demand a tighter setup or pass.
 - Use NEWS as a catalyst/context check: a bullish catalyst strengthens a long; a fresh bearish headline (lawsuit, downgrade, guidance cut) is a reason to pass even on a clean chart.
 - Use WALL STREET signals as confirmation only, never as a trigger. A BUY consensus with meaningful price-target upside corroborates a long; a SELL consensus or a price target BELOW current price is a yellow flag — don't fight it without a strong technical reason. Missing analyst data is fine — just lean on technicals.
 
@@ -128,7 +130,10 @@ Review all candidates carefully. Think through each one. Then commit to your sin
 def _get_client() -> anthropic.Anthropic:
     global _anthropic_client
     if _anthropic_client is None:
-        _anthropic_client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        _anthropic_client = anthropic.Anthropic(
+            api_key=config.ANTHROPIC_API_KEY,
+            timeout=config.ANALYST_TIMEOUT_SECS,
+        )
     return _anthropic_client
 
 
@@ -180,9 +185,23 @@ def _format_candidate(candidate: dict) -> str:
     price_zone = s.get("price_zone", "GREEN")
     zone_note = " ⚠️ BUFFER ZONE — only pickable if PREMIUM" if price_zone == "BUFFER" else ""
 
+    rs = s.get("rel_strength")
+    rs_str = f"{rs:+.1f}pp vs SPY (60d)" if rs is not None else "n/a"
+    adx = t.get("adx")
+    if adx is not None:
+        if adx >= config.ADX_STRONG:
+            adx_str = f"{adx} (STRONG trend)"
+        elif adx < config.ADX_CHOPPY:
+            adx_str = f"{adx} (CHOPPY — be wary)"
+        else:
+            adx_str = f"{adx} (moderate)"
+    else:
+        adx_str = "n/a"
+
     return f"""
 === {sym} ==={zone_note}
 Price: ${t.get('last_close', s.get('last_close', 'N/A'))} | Zone: {price_zone} | Trend: {t.get('trend', 'N/A')} | RSI: {t.get('rsi', s.get('rsi', 'N/A'))}
+Relative strength: {rs_str} | ADX: {adx_str}
 MA20: ${t.get('ma20', 'N/A')} | MA50: ${t.get('ma50', 'N/A')} | MA200: ${t.get('ma200', 'N/A')}
 ATR(14): ${t.get('atr', 'N/A')} ({t.get('atr_pct', 'N/A')}% of price)
 MACD line: {t.get('macd_line', 'N/A')} | Histogram: {t.get('macd_histogram', 'N/A')}
@@ -200,7 +219,8 @@ Recent daily candles (oldest→newest):
 Scanner score: {s.get('score', 'N/A')}""".strip()
 
 
-def build_prompt(candidates: list[dict], regime: Optional[dict] = None) -> str:
+def build_prompt(candidates: list[dict], regime: Optional[dict] = None,
+                 track_record: str = "") -> str:
     """Build the user-turn message containing all candidate data."""
     blocks = [_format_candidate(c) for c in candidates]
     candidates_text = "\n\n".join(blocks)
@@ -213,10 +233,15 @@ def build_prompt(candidates: list[dict], regime: Optional[dict] = None) -> str:
             f"Factor this into your decision per the regime rules above.\n\n"
         )
 
+    record_block = f"{track_record}\n" if track_record else ""
+
     return (
         f"{regime_block}"
+        f"{record_block}"
         f"Review these {len(candidates)} swing trade candidates for the next few days. "
-        f"Pick exactly one trade or output NO_TRADE.\n\n"
+        f"Take your time and be thorough — work through each candidate methodically "
+        f"before committing. There is no rush; the goal is the single best risk-adjusted "
+        f"trade, or NO_TRADE if nothing is genuinely good.\n\n"
         f"{candidates_text}\n\n"
         f"Now output your decision as a single valid JSON object."
     )
@@ -245,8 +270,12 @@ def _call_sonnet(user_prompt: str) -> str:
     )
     if config.ANALYST_THINKING_BUDGET > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": config.ANALYST_THINKING_BUDGET}
+        # Deep thinking can take minutes — stream so the request never times out.
+        with client.messages.stream(**kwargs) as stream:
+            response = stream.get_final_message()
+    else:
+        response = client.messages.create(**kwargs)
 
-    response = client.messages.create(**kwargs)
     logger.info(
         "Analyst usage — model: %s, input: %d, output: %d, cache_read: %s, cache_create: %s",
         config.ANALYST_MODEL,
@@ -396,7 +425,8 @@ def _price_zone_of(symbol: str, candidates: list[dict]) -> str:
     return "GREEN"
 
 
-def analyze(candidates: list[dict], regime: Optional[dict] = None) -> dict:
+def analyze(candidates: list[dict], regime: Optional[dict] = None,
+            track_record: str = "") -> dict:
     """
     Run the full analyst pipeline:
       1. Build prompt from enriched candidates (+ market regime context)
@@ -415,7 +445,7 @@ def analyze(candidates: list[dict], regime: Optional[dict] = None) -> dict:
         logger.error("ANTHROPIC_API_KEY not set")
         return _no_trade("Anthropic API key not configured.")
 
-    user_prompt = build_prompt(candidates, regime)
+    user_prompt = build_prompt(candidates, regime, track_record)
 
     # ── Call Sonnet ───────────────────────────────────────────────────────────
     try:

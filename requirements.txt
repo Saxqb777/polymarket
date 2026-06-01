@@ -1,5 +1,5 @@
 # Core
-anthropic>=0.40.0
+anthropic>=0.49.0          # extended thinking + streaming get_final_message
 python-dotenv>=1.0.0
 
 # Market data

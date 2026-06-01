@@ -287,6 +287,19 @@ SCANNER_RSI_MIN = 40                     # not deeply oversold
 SCANNER_RSI_MAX = 75                     # not extended / overbought
 SCANNER_TOP_N = 10                       # candidates passed to analyst
 
+# ── Relative strength ──────────────────────────────────────────────────────────
+# Stocks are scored on how much they OUTPERFORM SPY over RS_PERIOD trading days.
+# Trade leaders, not laggards. Outperformance adds to the scanner score so strong
+# relative-strength names rise to the top 10.
+RS_BENCHMARK = "SPY"
+RS_PERIOD = 60                           # ~3 months of trading days
+RS_MIN_PCT = -5.0                        # soft floor — below this RS, no score bonus
+
+# ── Trend strength (ADX) ───────────────────────────────────────────────────────
+ADX_PERIOD = 14
+ADX_STRONG = 25                          # ADX above this = strong, tradeable trend
+ADX_CHOPPY = 20                          # ADX below this = choppy, analyst should be wary
+
 # ── Technical indicator periods ────────────────────────────────────────────────
 MA_SHORT = 20
 MA_LONG = 50
@@ -296,11 +309,14 @@ ATR_PERIOD = 14
 LOOKBACK_DAYS = 252   # 1 year of daily bars
 
 # ── Models ─────────────────────────────────────────────────────────────────────
-# The analyst (the "brain") runs on Opus 4.8 with extended thinking — the best
-# reasoning we can buy, which is exactly where it matters for trade decisions.
+# The analyst (the "brain") runs on Opus 4.8 with a LARGE extended-thinking budget.
+# We deliberately let it reason deeply — taking minutes if needed — to find the
+# single best trade. Quality of reasoning > saving pennies. The call streams so a
+# long deep-thinking request never hits a timeout.
 ANALYST_MODEL = os.getenv("ANALYST_MODEL", "claude-opus-4-8")  # trade decision brain
-ANALYST_THINKING_BUDGET = int(os.getenv("ANALYST_THINKING_BUDGET", 2500))  # extended-thinking tokens
-ANALYST_MAX_TOKENS = int(os.getenv("ANALYST_MAX_TOKENS", 4000))            # must exceed thinking budget
+ANALYST_THINKING_BUDGET = int(os.getenv("ANALYST_THINKING_BUDGET", 12000))  # deep-thinking tokens
+ANALYST_MAX_TOKENS = int(os.getenv("ANALYST_MAX_TOKENS", 16000))            # must exceed thinking budget
+ANALYST_TIMEOUT_SECS = int(os.getenv("ANALYST_TIMEOUT_SECS", 900))          # 15 min ceiling
 FILTER_MODEL = "claude-haiku-4-5"         # news sentiment tagging (cheap)
 
 # ── API keys ───────────────────────────────────────────────────────────────────
