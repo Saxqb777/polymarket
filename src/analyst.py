@@ -251,14 +251,19 @@ def build_prompt(candidates: list[dict], regime: Optional[dict] = None,
 
 def _call_sonnet(user_prompt: str) -> str:
     """
-    Send the prompt to the analyst model (Opus 4.8) with extended thinking and
-    return the raw text response. Extended thinking lets the model reason through
-    each candidate privately before committing to its JSON answer.
+    Send the prompt to the analyst model (Opus 4.8) with ADAPTIVE thinking and
+    return the raw text response. Adaptive thinking lets the model reason through
+    each candidate privately before committing to its JSON answer; the `effort`
+    setting controls how deeply it reasons. The call streams so a long
+    deep-thinking request never hits a timeout.
     """
     client = _get_client()
-    kwargs = dict(
+    response = None
+    with client.messages.stream(
         model=config.ANALYST_MODEL,
         max_tokens=config.ANALYST_MAX_TOKENS,
+        thinking={"type": "adaptive"},
+        output_config={"effort": config.ANALYST_EFFORT},
         system=[
             {
                 "type": "text",
@@ -267,24 +272,19 @@ def _call_sonnet(user_prompt: str) -> str:
             }
         ],
         messages=[{"role": "user", "content": user_prompt}],
-    )
-    if config.ANALYST_THINKING_BUDGET > 0:
-        kwargs["thinking"] = {"type": "enabled", "budget_tokens": config.ANALYST_THINKING_BUDGET}
-        # Deep thinking can take minutes — stream so the request never times out.
-        with client.messages.stream(**kwargs) as stream:
-            response = stream.get_final_message()
-    else:
-        response = client.messages.create(**kwargs)
+    ) as stream:
+        response = stream.get_final_message()
 
     logger.info(
-        "Analyst usage — model: %s, input: %d, output: %d, cache_read: %s, cache_create: %s",
+        "Analyst usage — model: %s, effort: %s, input: %d, output: %d, cache_read: %s, cache_create: %s",
         config.ANALYST_MODEL,
+        config.ANALYST_EFFORT,
         response.usage.input_tokens,
         response.usage.output_tokens,
         getattr(response.usage, "cache_read_input_tokens", "n/a"),
         getattr(response.usage, "cache_creation_input_tokens", "n/a"),
     )
-    # With extended thinking the response contains thinking block(s) first, then
+    # With adaptive thinking the response contains thinking block(s) first, then
     # the text block. Grab the text block specifically rather than content[0].
     text_block = next((b.text for b in response.content if getattr(b, "type", None) == "text"), None)
     if text_block is None:

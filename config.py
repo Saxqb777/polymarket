@@ -309,14 +309,17 @@ ATR_PERIOD = 14
 LOOKBACK_DAYS = 252   # 1 year of daily bars
 
 # ── Models ─────────────────────────────────────────────────────────────────────
-# The analyst (the "brain") runs on Opus 4.8 with a LARGE extended-thinking budget.
-# We deliberately let it reason deeply — taking minutes if needed — to find the
-# single best trade. Quality of reasoning > saving pennies. The call streams so a
-# long deep-thinking request never hits a timeout.
+# The analyst (the "brain") runs on Opus 4.8 with ADAPTIVE thinking. Opus 4.8 no
+# longer uses a fixed thinking-token budget — instead it decides how deeply to
+# reason, and the `effort` knob controls how hard it works. We run it at high
+# effort so it reasons deeply (taking minutes if needed) to find the single best
+# trade. Quality of reasoning > saving pennies. The call streams so a long
+# deep-thinking request never hits a timeout.
+#   effort options: "low" | "medium" | "high" | "max"  ("max" = hardest, slowest)
 ANALYST_MODEL = os.getenv("ANALYST_MODEL", "claude-opus-4-8")  # trade decision brain
-ANALYST_THINKING_BUDGET = int(os.getenv("ANALYST_THINKING_BUDGET", 12000))  # deep-thinking tokens
-ANALYST_MAX_TOKENS = int(os.getenv("ANALYST_MAX_TOKENS", 16000))            # must exceed thinking budget
-ANALYST_TIMEOUT_SECS = int(os.getenv("ANALYST_TIMEOUT_SECS", 900))          # 15 min ceiling
+ANALYST_EFFORT = os.getenv("ANALYST_EFFORT", "high")           # thinking depth knob
+ANALYST_MAX_TOKENS = int(os.getenv("ANALYST_MAX_TOKENS", 16000))  # hard output ceiling
+ANALYST_TIMEOUT_SECS = int(os.getenv("ANALYST_TIMEOUT_SECS", 900))  # 15 min ceiling
 FILTER_MODEL = "claude-haiku-4-5"         # news sentiment tagging (cheap)
 
 # ── API keys ───────────────────────────────────────────────────────────────────
