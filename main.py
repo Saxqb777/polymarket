@@ -18,7 +18,7 @@ import structlog
 import config
 from src import database, scanner, earnings, technicals, telegram_bot
 from src import news as news_mod
-from src import analyst, trade_plan
+from src import analyst, trade_plan, regime as regime_mod, fundamentals
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 
@@ -54,8 +54,8 @@ def run_pipeline(dry_run: bool = False) -> None:
         msg = (
             "⛔ *Monthly drawdown cap reached*\n\n"
             "Losses this month have hit the \\-8% threshold\\.\n"
-            "No trade recommendation this week\\.\n\n"
-            "_Review your open positions before next Sunday\\._"
+            "No trade recommendation this run\\.\n\n"
+            "_Review your open positions before the next scan\\._"
         )
         log.warning("monthly_drawdown_cap_reached")
         if not dry_run:
@@ -96,18 +96,25 @@ def run_pipeline(dry_run: bool = False) -> None:
             tech = technicals.compute_all(sym, df)
             company = config.SYMBOL_TO_COMPANY.get(sym, sym)
             news_summary = news_mod.get_news_summary(sym, company)
-            enriched.append({**c, "technicals": tech, "news": news_summary})
+            signals = fundamentals.get_analyst_signals(sym, tech.get("last_close"))
+            enriched.append({**c, "technicals": tech, "news": news_summary,
+                             "analyst_signals": signals})
             log.info("enriched_candidate", symbol=sym,
                      trend=tech.get("trend"), rsi=tech.get("rsi"),
-                     news_sentiment=news_summary.get("overall_sentiment"))
+                     news_sentiment=news_summary.get("overall_sentiment"),
+                     wall_st=(signals.get("recommendation") or {}).get("consensus"))
         except Exception as e:
             log.warning("enrichment_failed", symbol=sym, error=str(e))
             # Still pass the candidate with raw scanner data; analyst degrades gracefully
-            enriched.append({**c, "technicals": {}, "news": {}})
+            enriched.append({**c, "technicals": {}, "news": {}, "analyst_signals": {}})
 
-    # ── Step 5: Claude Sonnet analysis ───────────────────────────────────────
-    log.info("calling_analyst", candidates=len(enriched))
-    result = analyst.analyze(enriched)
+    # ── Step 4b: market regime ───────────────────────────────────────────────
+    regime = regime_mod.get_market_regime()
+    log.info("market_regime", regime=regime.get("regime"), score=regime.get("score"))
+
+    # ── Step 5: Claude analysis (Opus 4.8 + extended thinking) ───────────────
+    log.info("calling_analyst", candidates=len(enriched), model=config.ANALYST_MODEL)
+    result = analyst.analyze(enriched, regime)
 
     decision = result["decision"]
     symbol = result.get("symbol")
@@ -244,12 +251,15 @@ def main() -> None:
         return
 
     # ── Local scheduler mode (not used on Railway) ────────────────────────────
+    # On Railway the real cadence is driven by the cron in railway.toml. This
+    # local loop mirrors RUN_CADENCE_DAYS for convenience when testing locally.
     gulf_time = "20:00"
-    log.info("scheduler_started", fires_at=f"Sunday {gulf_time} Gulf time")
+    log.info("scheduler_started",
+             cadence=config.CADENCE_LABEL, fires_at=f"{gulf_time} Gulf time")
 
     # schedule library uses local system time — warn if system tz differs
     import time
-    schedule.every().sunday.at(gulf_time).do(run_pipeline)
+    schedule.every(config.RUN_CADENCE_DAYS).days.at(gulf_time).do(run_pipeline)
 
     log.info("next_run", at=str(schedule.next_run()))
     while True:

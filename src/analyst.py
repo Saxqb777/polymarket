@@ -24,11 +24,24 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 - You always anchor stop-losses to a technical level (below support, below a key MA), never arbitrary round numbers
 
 ## Hard risk rules (non-negotiable — built into the system)
-1. ONE trade per week maximum. You must pick exactly one stock. Only use NO_TRADE if every single candidate has a structurally broken setup (e.g. stop above entry, non-numeric prices, missing critical data).
-2. Always pick your BEST candidate. Only use NO_TRADE as a last resort — not a quality filter.
-3. Stop-loss is mandatory. Every trade must have a specific stop-loss price.
-4. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
-5. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
+1. AT MOST ONE trade per run. You pick exactly one stock, or NO_TRADE.
+2. The bot now scans FREQUENTLY (every couple of days), so you are NOT forced to trade. NO_TRADE is a legitimate, encouraged output when no candidate offers a genuinely good risk/reward setup — another scan comes in a couple of days. A forced mediocre trade is worse than waiting. Quality over activity.
+3. That said, do not be timid: if a candidate has a clean, high-probability setup that clears the quality bar (ACCEPTABLE tier or better), take it. Reserve NO_TRADE for weeks where the best setup is genuinely weak, broken, or fighting the market regime.
+4. Stop-loss is mandatory. Every trade must have a specific stop-loss price.
+5. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
+6. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
+
+## Market regime (read this first)
+You are given the current broad-market regime (RISK_ON / NEUTRAL / RISK_OFF) computed from SPY and QQQ:
+- RISK_ON: trade your best setup normally. Long setups have the wind at their back.
+- NEUTRAL: be selective. Favour STANDARD/PREMIUM setups; demand clean technicals.
+- RISK_OFF: the market is falling. Long trades are swimming upstream. Only take a trade if the setup is exceptional (PREMIUM, strong stock-specific catalyst, clear support). Otherwise return NO_TRADE and cite the regime. Do NOT force a long into a down market.
+
+## Using the data you are given
+Each candidate comes with: price/trend/RSI, moving averages, ATR, MACD, Bollinger bands, support/resistance, the last 10 daily candles, news sentiment with headlines, and Wall Street analyst signals (recommendation consensus + price target).
+- Lead with PRICE ACTION and TECHNICALS — the candles, trend, levels, and risk/reward define the trade. This is a technical swing, not a fundamentals bet.
+- Use NEWS as a catalyst/context check: a bullish catalyst strengthens a long; a fresh bearish headline (lawsuit, downgrade, guidance cut) is a reason to pass even on a clean chart.
+- Use WALL STREET signals as confirmation only, never as a trigger. A BUY consensus with meaningful price-target upside corroborates a long; a SELL consensus or a price target BELOW current price is a yellow flag — don't fight it without a strong technical reason. Missing analyst data is fine — just lean on technicals.
 
 ## Price zone rules
 Each candidate is tagged GREEN or BUFFER:
@@ -126,12 +139,43 @@ def _format_candidate(candidate: dict) -> str:
     sym = candidate["symbol"]
     t = candidate.get("technicals", {})
     n = candidate.get("news", {})
+    sig = candidate.get("analyst_signals", {}) or {}
     s = candidate  # scanner fields live at the top level
 
     support_str = " / ".join(f"${v}" for v in t.get("support_levels", [])) or "none detected"
     resistance_str = " / ".join(f"${v}" for v in t.get("resistance_levels", [])) or "none detected"
     headlines = n.get("top_headlines", [])
     headline_str = "\n".join(f"    - {h}" for h in headlines) if headlines else "    - No headlines found"
+
+    # Recent daily candles (last 10) — lets Claude read the actual price action /
+    # patterns rather than only summary stats.
+    candles = t.get("recent_candles", [])
+    if candles:
+        candle_lines = "\n".join(
+            f"    {c['date']}: O {c['open']} H {c['high']} L {c['low']} C {c['close']} V {c['volume']:,}"
+            for c in candles
+        )
+    else:
+        candle_lines = "    (no candle data)"
+
+    # Wall Street analyst signals (Finnhub)
+    rec = sig.get("recommendation") or {}
+    pt = sig.get("price_target") or {}
+    if rec:
+        wall_st_str = (
+            f"{rec.get('consensus', 'N/A')} consensus "
+            f"({rec.get('strongBuy', 0)} strong buy / {rec.get('buy', 0)} buy / "
+            f"{rec.get('hold', 0)} hold / {rec.get('sell', 0)} sell / "
+            f"{rec.get('strongSell', 0)} strong sell — {rec.get('bullish_pct', 0):.0f}% bullish)"
+        )
+    else:
+        wall_st_str = "no analyst coverage data"
+    if pt and pt.get("mean"):
+        upside = pt.get("upside_pct")
+        upside_str = f", {upside:+.1f}% vs current" if upside is not None else ""
+        price_target_str = f"mean ${pt['mean']} (range ${pt.get('low')}–${pt.get('high')}{upside_str})"
+    else:
+        price_target_str = "no price target data"
 
     price_zone = s.get("price_zone", "GREEN")
     zone_note = " ⚠️ BUFFER ZONE — only pickable if PREMIUM" if price_zone == "BUFFER" else ""
@@ -147,18 +191,31 @@ Support:    {support_str}
 Resistance: {resistance_str}
 Volume: {t.get('last_volume', s.get('vol_20d_avg', 'N/A'))} ({t.get('vol_ratio', s.get('volume_ratio', 'N/A'))}x 20d avg)
 News sentiment: {n.get('overall_sentiment', 'NEUTRAL')} ({n.get('bullish_count', 0)} bullish / {n.get('bearish_count', 0)} bearish / {n.get('neutral_count', 0)} neutral)
+Wall St analysts: {wall_st_str}
+Price target: {price_target_str}
 Top headlines:
 {headline_str}
+Recent daily candles (oldest→newest):
+{candle_lines}
 Scanner score: {s.get('score', 'N/A')}""".strip()
 
 
-def build_prompt(candidates: list[dict]) -> str:
+def build_prompt(candidates: list[dict], regime: Optional[dict] = None) -> str:
     """Build the user-turn message containing all candidate data."""
     blocks = [_format_candidate(c) for c in candidates]
     candidates_text = "\n\n".join(blocks)
 
+    regime_block = ""
+    if regime:
+        regime_block = (
+            f"## CURRENT MARKET REGIME: {regime.get('regime', 'NEUTRAL')}\n"
+            f"{regime.get('summary', '')}\n"
+            f"Factor this into your decision per the regime rules above.\n\n"
+        )
+
     return (
-        f"Review these {len(candidates)} swing trade candidates for the upcoming week. "
+        f"{regime_block}"
+        f"Review these {len(candidates)} swing trade candidates for the next few days. "
         f"Pick exactly one trade or output NO_TRADE.\n\n"
         f"{candidates_text}\n\n"
         f"Now output your decision as a single valid JSON object."
@@ -168,11 +225,15 @@ def build_prompt(candidates: list[dict]) -> str:
 # ── Claude API call ───────────────────────────────────────────────────────────
 
 def _call_sonnet(user_prompt: str) -> str:
-    """Send the prompt to Claude Sonnet and return the raw text response."""
+    """
+    Send the prompt to the analyst model (Opus 4.8) with extended thinking and
+    return the raw text response. Extended thinking lets the model reason through
+    each candidate privately before committing to its JSON answer.
+    """
     client = _get_client()
-    response = client.messages.create(
+    kwargs = dict(
         model=config.ANALYST_MODEL,
-        max_tokens=1500,
+        max_tokens=config.ANALYST_MAX_TOKENS,
         system=[
             {
                 "type": "text",
@@ -182,14 +243,24 @@ def _call_sonnet(user_prompt: str) -> str:
         ],
         messages=[{"role": "user", "content": user_prompt}],
     )
+    if config.ANALYST_THINKING_BUDGET > 0:
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": config.ANALYST_THINKING_BUDGET}
+
+    response = client.messages.create(**kwargs)
     logger.info(
-        "Sonnet usage — input: %d, output: %d, cache_read: %s, cache_create: %s",
+        "Analyst usage — model: %s, input: %d, output: %d, cache_read: %s, cache_create: %s",
+        config.ANALYST_MODEL,
         response.usage.input_tokens,
         response.usage.output_tokens,
         getattr(response.usage, "cache_read_input_tokens", "n/a"),
         getattr(response.usage, "cache_creation_input_tokens", "n/a"),
     )
-    return response.content[0].text.strip()
+    # With extended thinking the response contains thinking block(s) first, then
+    # the text block. Grab the text block specifically rather than content[0].
+    text_block = next((b.text for b in response.content if getattr(b, "type", None) == "text"), None)
+    if text_block is None:
+        raise ValueError("No text block in analyst response")
+    return text_block.strip()
 
 
 # ── JSON parsing ──────────────────────────────────────────────────────────────
@@ -325,13 +396,14 @@ def _price_zone_of(symbol: str, candidates: list[dict]) -> str:
     return "GREEN"
 
 
-def analyze(candidates: list[dict]) -> dict:
+def analyze(candidates: list[dict], regime: Optional[dict] = None) -> dict:
     """
     Run the full analyst pipeline:
-      1. Build prompt from enriched candidates
-      2. Call Claude Sonnet
+      1. Build prompt from enriched candidates (+ market regime context)
+      2. Call the analyst model (Opus 4.8, extended thinking)
       3. Parse and validate the JSON response
-      4. Return a clean decision dict (TRADE or NO_TRADE)
+      4. Apply strict-quality discipline (BELOW_BAR → NO_TRADE)
+      5. Return a clean decision dict (TRADE or NO_TRADE)
 
     Never raises — any failure returns NO_TRADE with an explanatory reason.
     """
@@ -343,7 +415,7 @@ def analyze(candidates: list[dict]) -> dict:
         logger.error("ANTHROPIC_API_KEY not set")
         return _no_trade("Anthropic API key not configured.")
 
-    user_prompt = build_prompt(candidates)
+    user_prompt = build_prompt(candidates, regime)
 
     # ── Call Sonnet ───────────────────────────────────────────────────────────
     try:
@@ -364,6 +436,24 @@ def analyze(candidates: list[dict]) -> dict:
     if not valid:
         logger.warning("Validation failed — forcing NO_TRADE. Reason: %s", reason)
         return _no_trade(f"Trade rejected by risk validation: {reason}")
+
+    # ── Strict quality discipline ─────────────────────────────────────────────
+    # Frequency up, quality up: because the bot scans every couple of days, we
+    # are not forced to send a weak pick. A BELOW_BAR setup becomes NO_TRADE.
+    if (
+        config.STRICT_QUALITY
+        and result.get("decision") == "TRADE"
+        and result.get("quality_tier") == "BELOW_BAR"
+    ):
+        logger.info(
+            "STRICT_QUALITY: %s pick is BELOW_BAR (R:R=%s, move=%s%%) — converting to NO_TRADE",
+            result.get("symbol"), result.get("risk_reward_ratio"), result.get("target_move_pct"),
+        )
+        return _no_trade(
+            f"Best available setup ({result.get('symbol')}) was below the quality bar "
+            f"(R:R 1:{result.get('risk_reward_ratio')}, target move {result.get('target_move_pct')}%). "
+            f"Holding out for a better setup — next scan in {config.CADENCE_LABEL}."
+        )
 
     # ── Buffer zone enforcement ───────────────────────────────────────────────
     if result.get("decision") == "TRADE":

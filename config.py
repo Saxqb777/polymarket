@@ -10,11 +10,41 @@ RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", 0.01))
 MAX_POSITION_SIZE_PCT = float(os.getenv("MAX_POSITION_SIZE_PCT", 0.05))
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 
+# ── Run cadence ────────────────────────────────────────────────────────────────
+# The bot now runs on a configurable cadence (Railway cron drives the real
+# schedule; this controls the copy + the dashboard countdown so everything stays
+# coherent). Default = every 2 days. Set RUN_CADENCE_DAYS=7 to go back to weekly.
+RUN_CADENCE_DAYS = int(os.getenv("RUN_CADENCE_DAYS", 2))
+RUN_HOUR_UTC = int(os.getenv("RUN_HOUR_UTC", 16))   # 16:00 UTC = 20:00 Gulf
+
+
+def _cadence_label(days: int) -> str:
+    if days <= 1:
+        return "daily"
+    if days == 7:
+        return "weekly"
+    return f"every {days} days"
+
+
+CADENCE_LABEL = _cadence_label(RUN_CADENCE_DAYS)   # e.g. "every 2 days"
+
 # ── Risk Rules (hardcoded — never change these) ────────────────────────────────
 MIN_RISK_REWARD = 2.5
 EARNINGS_BLACKOUT_DAYS = 7
 MONTHLY_DRAWDOWN_CAP_PCT = 0.08
 PAPER_TRADE_WEEKS_MIN = 4
+# Quality discipline: because the bot now scans frequently (every 2 days), it is
+# NOT forced to trade every run. When STRICT_QUALITY is on, any pick that lands
+# BELOW_BAR is converted to NO_TRADE — another scan comes in 2 days. Frequency up,
+# quality up. Set to "false" to send below-bar picks anyway (old behaviour).
+STRICT_QUALITY = os.getenv("STRICT_QUALITY", "true").lower() == "true"
+
+# ── Market regime filter ───────────────────────────────────────────────────────
+# Before picking, the bot checks the broad market (SPY + QQQ). Going long into a
+# falling market is a losing game. In RISK_OFF the analyst is told to demand a
+# stronger setup or sit out.
+REGIME_INDICES = ["SPY", "QQQ"]
+REGIME_ENABLED = os.getenv("REGIME_ENABLED", "true").lower() == "true"
 
 # ── Timezone ───────────────────────────────────────────────────────────────────
 GULF_TZ = pytz.timezone("Asia/Dubai")  # UTC+4, no DST
@@ -53,6 +83,23 @@ WATCHLIST = [
     "DIS", "T", "VZ", "CMCSA",
     # Momentum / Misc (5)
     "CELH", "LMND", "FLNC", "AMKR", "FORM",
+    # ── 2026-06 expansion: liquid $10–100 names (sweet spot) ──────────────────
+    # Banks / Financials (7)
+    "BAC", "WFC", "C", "USB", "KEY", "SCHW", "ALLY",
+    # Airlines (4)
+    "AAL", "UAL", "DAL", "LUV",
+    # Metals / Mining (7)
+    "CLF", "X", "AA", "VALE", "GOLD", "KGC", "HL",
+    # Energy (5)
+    "COP", "MPC", "PSX", "SU", "ET",
+    # Consumer / Retail / Media (12)
+    "NKE", "SBUX", "M", "KSS", "BBY", "GME", "WBA", "PARA", "WBD", "SNAP", "LYFT", "CNK",
+    # China ADRs (4)
+    "BABA", "BIDU", "TCOM", "TME",
+    # Crypto miners (3)
+    "RIOT", "CLSK", "WULF",
+    # Semis / Hardware (3)
+    "MU", "DELL", "STX",
 ]
 
 # ── Company name mapping (for news queries) ────────────────────────────────────
@@ -170,6 +217,60 @@ SYMBOL_TO_COMPANY = {
     "FLNC": "Fluence Energy",
     "AMKR": "Amkor Technology",
     "FORM": "FormFactor",
+    # ── 2026-06 expansion ─────────────────────────────────────────────────────
+    # Banks / Financials
+    "BAC": "Bank of America",
+    "WFC": "Wells Fargo",
+    "C": "Citigroup",
+    "USB": "U.S. Bancorp",
+    "KEY": "KeyCorp",
+    "SCHW": "Charles Schwab",
+    "ALLY": "Ally Financial",
+    # Airlines
+    "AAL": "American Airlines",
+    "UAL": "United Airlines",
+    "DAL": "Delta Air Lines",
+    "LUV": "Southwest Airlines",
+    # Metals / Mining
+    "CLF": "Cleveland-Cliffs",
+    "X": "United States Steel",
+    "AA": "Alcoa",
+    "VALE": "Vale",
+    "GOLD": "Barrick Gold",
+    "KGC": "Kinross Gold",
+    "HL": "Hecla Mining",
+    # Energy
+    "COP": "ConocoPhillips",
+    "MPC": "Marathon Petroleum",
+    "PSX": "Phillips 66",
+    "SU": "Suncor Energy",
+    "ET": "Energy Transfer",
+    # Consumer / Retail / Media
+    "NKE": "Nike",
+    "SBUX": "Starbucks",
+    "M": "Macy's",
+    "KSS": "Kohl's",
+    "BBY": "Best Buy",
+    "GME": "GameStop",
+    "WBA": "Walgreens Boots Alliance",
+    "PARA": "Paramount Global",
+    "WBD": "Warner Bros Discovery",
+    "SNAP": "Snap",
+    "LYFT": "Lyft",
+    "CNK": "Cinemark",
+    # China ADRs
+    "BABA": "Alibaba",
+    "BIDU": "Baidu",
+    "TCOM": "Trip.com",
+    "TME": "Tencent Music Entertainment",
+    # Crypto miners
+    "RIOT": "Riot Platforms",
+    "CLSK": "CleanSpark",
+    "WULF": "TeraWulf",
+    # Semis / Hardware
+    "MU": "Micron Technology",
+    "DELL": "Dell Technologies",
+    "STX": "Seagate Technology",
 }
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
@@ -195,7 +296,11 @@ ATR_PERIOD = 14
 LOOKBACK_DAYS = 252   # 1 year of daily bars
 
 # ── Models ─────────────────────────────────────────────────────────────────────
-ANALYST_MODEL = "claude-sonnet-4-6"       # trade decision brain
+# The analyst (the "brain") runs on Opus 4.8 with extended thinking — the best
+# reasoning we can buy, which is exactly where it matters for trade decisions.
+ANALYST_MODEL = os.getenv("ANALYST_MODEL", "claude-opus-4-8")  # trade decision brain
+ANALYST_THINKING_BUDGET = int(os.getenv("ANALYST_THINKING_BUDGET", 2500))  # extended-thinking tokens
+ANALYST_MAX_TOKENS = int(os.getenv("ANALYST_MAX_TOKENS", 4000))            # must exceed thinking budget
 FILTER_MODEL = "claude-haiku-4-5"         # news sentiment tagging (cheap)
 
 # ── API keys ───────────────────────────────────────────────────────────────────

@@ -6,5 +6,5 @@ startCommand = "python main.py --now"
 restartPolicyType = "never"
 
 [[cron]]
-schedule = "0 16 * * 0"     # Sunday 16:00 UTC = Sunday 20:00 Gulf (UTC+4)
+schedule = "0 16 */2 * *"   # Every 2 days at 16:00 UTC = 20:00 Gulf (UTC+4)
 command = "python main.py --now"

@@ -167,7 +167,7 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
     tier_str = _esc(quality_tier or "BELOW_BAR")
 
     if quality_tier == "PREMIUM":
-        header = "🌟 *PREMIUM WEEKLY TRADE PICK*"
+        header = "🌟 *PREMIUM TRADE PICK*"
         quality_block = (
             f"\n"
             f"⭐ _Premium setup \\(R:R {_esc(str(rr))}\\+, target move {move_str}\\)_\n"
@@ -183,7 +183,7 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
             f"Trading this is your call — the bot does not recommend it\\.\n"
         )
     else:
-        header = "🎯 *WEEKLY TRADE PICK*"
+        header = "🎯 *TRADE PICK*"
         quality_block = ""
 
     return (
@@ -214,19 +214,20 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
         f"⚠️ *Risks*\n"
         f"{risk_lines}\n"
         f"\n"
-        f"🔔 _Set alerts at entry, stop, and target before Monday open\\._"
+        f"🔔 _Set alerts at entry, stop, and target before the next session open\\._"
     )
 
 
 def _format_no_trade(r: dict, date_str: str, mode_str: str) -> str:
-    reason = _esc(r.get("no_trade_reason") or "No qualifying setup found this week.")
+    reason = _esc(r.get("no_trade_reason") or "No qualifying setup found this run.")
+    next_scan = _esc(f"Next scan {config.CADENCE_LABEL}.")
     return (
-        f"😴 *NO TRADE THIS WEEK*\n"
+        f"😴 *NO TRADE THIS RUN*\n"
         f"_{date_str} · {mode_str}_\n"
         f"\n"
         f"Reviewed all candidates — no setup meets our minimum criteria\\.\n"
         f"\n"
         f"_Reason: {reason}_\n"
         f"\n"
-        f"Capital preserved\\. See you next Sunday\\."
+        f"Capital preserved\\. {next_scan}"
     )

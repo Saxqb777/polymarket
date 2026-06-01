@@ -82,7 +82,8 @@
 
       <div>
         <div class="mono muted" style="font-size:10px; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">Next Scan</div>
-        <div class="mono" style="font-size:15px; color:var(--text-dim);">Sunday · 16:00 UTC · 20:00 Gulf</div>
+        <div class="mono" style="font-size:15px; color:var(--text-dim);">{{ bot.next_scan_display }} · 20:00 Gulf</div>
+        <div class="mono muted" style="font-size:11px; margin-top:4px;">Cadence · {{ bot.cadence_label }}</div>
       </div>
 
       <div>
@@ -151,7 +152,7 @@
           hx-post="/bot/trigger-scan"
           hx-target="#bot-last-run"
           hx-swap="innerHTML"
-          hx-confirm="Trigger bot run? This will scan 101 tickers and may send a Telegram message even outside normal Sunday hours."
+          hx-confirm="Trigger bot run? This will scan the full watchlist and may send a Telegram message even outside the normal schedule."
           hx-indicator="#scan-spinner">
     ⚡ MANUAL SCAN NOW
   </button>

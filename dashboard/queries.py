@@ -566,14 +566,32 @@ def get_bot_status() -> dict:
         """).fetchone()
         total_runs = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
 
+    import config as _cfg
+    cadence_days = getattr(_cfg, "RUN_CADENCE_DAYS", 2)
+    run_hour = getattr(_cfg, "RUN_HOUR_UTC", 16)
+
     now_utc = dt.now(timezone.utc)
-    # Next Sunday at 16:00 UTC
-    days_ahead = (6 - now_utc.weekday()) % 7  # 6 = Sunday in Python (Mon=0)
-    if days_ahead == 0 and (now_utc.hour > 16 or (now_utc.hour == 16 and now_utc.minute > 0)):
-        days_ahead = 7
-    next_scan = (now_utc + td(days=days_ahead)).replace(
-        hour=16, minute=0, second=0, microsecond=0
-    )
+    # Next scan = last run + cadence_days at run_hour UTC. If we have no last run
+    # (or it's overdue), schedule the next run_hour from now.
+    next_scan = None
+    if last and last["run_timestamp"]:
+        try:
+            last_dt = dt.fromisoformat(last["run_timestamp"])
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            candidate = (last_dt + td(days=cadence_days)).replace(
+                hour=run_hour, minute=0, second=0, microsecond=0
+            )
+            next_scan = candidate
+        except Exception:
+            next_scan = None
+
+    if next_scan is None or next_scan <= now_utc:
+        # Today at run_hour if still ahead, else tomorrow.
+        candidate = now_utc.replace(hour=run_hour, minute=0, second=0, microsecond=0)
+        if candidate <= now_utc:
+            candidate = candidate + td(days=1)
+        next_scan = candidate
     delta      = next_scan - now_utc
     total_secs = max(0, int(delta.total_seconds()))
     days_left  = total_secs // 86400
@@ -598,10 +616,11 @@ def get_bot_status() -> dict:
         "next_scan_iso":              next_scan.isoformat(),
         "next_scan_display":          next_scan.strftime("%A · %H:%M UTC"),
         "time_until_next":            time_until,
+        "cadence_label":              getattr(_cfg, "CADENCE_LABEL", "every 2 days"),
         "total_runs_lifetime":        total_runs,
         "python_version":             f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "runtime_environment":        os.getenv("RAILWAY_ENVIRONMENT", "local dev"),
-        "bot_version":                "v1.2",
+        "bot_version":                "v1.3",
     }
 
 

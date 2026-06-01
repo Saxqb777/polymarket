@@ -6,12 +6,44 @@
 
 ## 📍 Current Status
 
-**Phase:** Dashboard — Step 6.5 complete (live prices + full stub pages + analytics)
-**Next step:** Step 7 — TBD (Telegram alerts? Mobile polish? Deploy to Railway?)
+**Phase:** Engine Upgrade v2 — "pump it up" round 1 shipped
+**Next step:** Verify a live run on Railway (Opus brain + regime + Finnhub signals), then decide round 2 (see roadmap in chat)
 
 ---
 
 ## 📝 Log
+
+### 2026-06-01 — Engine Upgrade v2: cadence + Opus brain + regime + Wall St signals
+
+**Cadence coherence (every 2 days)**
+- `config.py`: RUN_CADENCE_DAYS (default 2), RUN_HOUR_UTC, CADENCE_LABEL helper
+- `railway.toml`: cron → `0 16 */2 * *` (every 2 days, matches Railway dashboard change)
+- Fixed all "Sunday / weekly" copy: Telegram headers ("TRADE PICK" not "WEEKLY"), no-trade footer ("Next scan every 2 days"), drawdown msg, dashboard bot countdown now cadence-based off last run
+- `main.py` local scheduler now uses `every(RUN_CADENCE_DAYS).days`
+
+**Quality discipline (frequency up, quality up)**
+- `config.STRICT_QUALITY` (default true): BELOW_BAR picks → NO_TRADE since another scan comes in 2 days
+- Rewrote analyst system prompt: NO_TRADE is legitimate/encouraged on weak setups; not forced to trade
+
+**Opus 4.8 brain + extended thinking**
+- Analyst model → `claude-opus-4-8` (configurable), ANALYST_THINKING_BUDGET=2500
+- `_call_sonnet` handles thinking blocks + extracts the text block
+- Now feeds Claude the last 10 daily candles (were computed but never sent)
+
+**Market regime filter (new `src/regime.py`)**
+- Reads SPY + QQQ vs 50/200 MA + slope → RISK_ON / NEUTRAL / RISK_OFF
+- Fed into analyst prompt; RISK_OFF tells the brain to demand exceptional setups or sit out
+
+**Wall Street signals (new `src/fundamentals.py`)**
+- Finnhub recommendation trends (strongBuy…strongSell consensus) + price target / upside
+- Wired into enrichment + analyst prompt as confirmation signal (graceful if endpoint unavailable)
+
+**Watchlist expansion**
+- 101 → 146 tickers: added 45 liquid $10–100 names (banks, airlines, metals, energy, retail/media, China ADRs, crypto miners, semis)
+
+**Gotchas / notes**
+- Could not run a live smoke test in this container (deps + API keys absent); all modules syntax-checked, watchlist verified (0 dupes, all named)
+- Price-target endpoint may be premium on Finnhub free tier — code degrades gracefully
 
 ### 2026-05-20 — Dashboard Step 6.5: Live prices + bot/trades/insights pages
 
