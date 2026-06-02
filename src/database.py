@@ -121,6 +121,24 @@ def check_monthly_drawdown(month: Optional[str] = None, db_path: str = config.DB
     return drawdown >= config.MONTHLY_DRAWDOWN_CAP_PCT
 
 
+def get_recent_pick_symbols(limit: int = 3, db_path: str = config.DB_PATH) -> list[str]:
+    """Return symbols picked (decision=TRADE) in the last `limit` runs, newest first."""
+    try:
+        with _connect(db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT symbol FROM runs
+                WHERE decision = 'TRADE' AND symbol IS NOT NULL
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [r["symbol"] for r in rows]
+    except Exception:
+        return []
+
+
 def get_run_history(limit: int = 20, db_path: str = config.DB_PATH) -> list[dict]:
     with _connect(db_path) as conn:
         rows = conn.execute(

@@ -108,6 +108,22 @@ def run_pipeline(dry_run: bool = False) -> None:
             # Still pass the candidate with raw scanner data; analyst degrades gracefully
             enriched.append({**c, "technicals": {}, "news": {}, "analyst_signals": {}})
 
+    # ── Step 4a: recent-pick blackout (avoid repeating the same symbol) ─────
+    recent_picks = database.get_recent_pick_symbols(limit=3)
+    if recent_picks:
+        last_pick = recent_picks[0]
+        # Hard-filter: remove the most-recently-picked symbol from candidates
+        enriched_filtered = [c for c in enriched if c["symbol"] != last_pick]
+        if enriched_filtered:
+            if len(enriched_filtered) < len(enriched):
+                log.info("blackout_last_pick", removed=last_pick,
+                         remaining=[c["symbol"] for c in enriched_filtered])
+            enriched = enriched_filtered
+        # Soft-warn about the 2nd and 3rd most recent picks via prompt injection
+        repeat_warning = recent_picks[1:]  # symbols picked 2 and 3 runs ago
+    else:
+        repeat_warning = []
+
     # ── Step 4b: market regime ───────────────────────────────────────────────
     regime = regime_mod.get_market_regime()
     log.info("market_regime", regime=regime.get("regime"), score=regime.get("score"))
@@ -117,7 +133,7 @@ def run_pipeline(dry_run: bool = False) -> None:
 
     # ── Step 5: Claude analysis (Opus 4.8 + extended thinking) ───────────────
     log.info("calling_analyst", candidates=len(enriched), model=config.ANALYST_MODEL)
-    result = analyst.analyze(enriched, regime, track_record)
+    result = analyst.analyze(enriched, regime, track_record, repeat_warning)
 
     decision = result["decision"]
     symbol = result.get("symbol")

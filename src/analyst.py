@@ -220,7 +220,8 @@ Scanner score: {s.get('score', 'N/A')}""".strip()
 
 
 def build_prompt(candidates: list[dict], regime: Optional[dict] = None,
-                 track_record: str = "") -> str:
+                 track_record: str = "",
+                 repeat_warning: list | None = None) -> str:
     """Build the user-turn message containing all candidate data."""
     blocks = [_format_candidate(c) for c in candidates]
     candidates_text = "\n\n".join(blocks)
@@ -235,9 +236,21 @@ def build_prompt(candidates: list[dict], regime: Optional[dict] = None,
 
     record_block = f"{track_record}\n" if track_record else ""
 
+    repeat_block = ""
+    if repeat_warning:
+        syms = ", ".join(repeat_warning)
+        repeat_block = (
+            f"## VARIETY NOTE\n"
+            f"The bot already picked {syms} in recent runs. Avoid recommending "
+            f"these symbols again unless there is a compelling, clearly new catalyst "
+            f"that makes them materially better than every other candidate. "
+            f"Variety in picks matters — explore the full candidate list carefully.\n\n"
+        )
+
     return (
         f"{regime_block}"
         f"{record_block}"
+        f"{repeat_block}"
         f"Review these {len(candidates)} swing trade candidates for the next few days. "
         f"Take your time and be thorough — work through each candidate methodically "
         f"before committing. There is no rush; the goal is the single best risk-adjusted "
@@ -426,7 +439,7 @@ def _price_zone_of(symbol: str, candidates: list[dict]) -> str:
 
 
 def analyze(candidates: list[dict], regime: Optional[dict] = None,
-            track_record: str = "") -> dict:
+            track_record: str = "", repeat_warning: list | None = None) -> dict:
     """
     Run the full analyst pipeline:
       1. Build prompt from enriched candidates (+ market regime context)
@@ -445,7 +458,7 @@ def analyze(candidates: list[dict], regime: Optional[dict] = None,
         logger.error("ANTHROPIC_API_KEY not set")
         return _no_trade("Anthropic API key not configured.")
 
-    user_prompt = build_prompt(candidates, regime, track_record)
+    user_prompt = build_prompt(candidates, regime, track_record, repeat_warning)
 
     # ── Call Sonnet ───────────────────────────────────────────────────────────
     try:
