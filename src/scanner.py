@@ -114,7 +114,10 @@ def compute_score(symbol: str, df: pd.DataFrame,
         score += max(0.0, 1.0 - rsi_distance) * 20
 
         ma20_distance = abs(last_close - ma20) / ma20
-        score += max(0.0, 1.0 - (ma20_distance / 0.03)) * 20
+        # Cheaper stocks are more volatile — widen the proximity window
+        # so a $15 stock 4% from MA isn't penalised the same as a $90 stock
+        ma20_window = 0.03 if last_close >= 50 else 0.06
+        score += max(0.0, 1.0 - (ma20_distance / ma20_window)) * 20
 
         ma20_series = close.rolling(config.MA_SHORT).mean()
         ma20_5d_ago = float(ma20_series.iloc[-5])

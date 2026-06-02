@@ -100,6 +100,21 @@ WATCHLIST = [
     "RIOT", "CLSK", "WULF",
     # Semis / Hardware (3)
     "MU", "DELL", "STX",
+    # ── 2026-06 low-price expansion: $10–$50 sweet spot ───────────────────────
+    # Pharma / Biotech ($10–$40)
+    "DNLI", "ARVN", "BEAM", "ARRY",
+    # Fintech / Lending ($10–$50)
+    "UWMC", "PFSI",
+    # EV / Clean Energy ($10–$30)
+    "CHPT", "STEM",
+    # Tech / Software / AI ($10–$40)
+    "AI", "BBAI",
+    # Banks / Regional ($10–$25)
+    "HBAN", "RF", "FITB", "ZION",
+    # Industrials / Aerospace
+    "JOBY", "ACHR",
+    # Consumer turnaround / momentum
+    "OPEN", "LAZR",
 ]
 
 # ── Company name mapping (for news queries) ────────────────────────────────────
@@ -271,6 +286,38 @@ SYMBOL_TO_COMPANY = {
     "MU": "Micron Technology",
     "DELL": "Dell Technologies",
     "STX": "Seagate Technology",
+    # ── 2026-06 low-price expansion ($10–$50 sweet spot) ─────────────────────
+    # Pharma / Biotech
+    "ZYME": "Zymeworks",
+    "DNLI": "Denali Therapeutics",
+    "ARVN": "Arvinas",
+    "BEAM": "Beam Therapeutics",
+    "ARRY": "Array Technologies",
+    # Fintech / Lending
+    "OPEN": "Opendoor Technologies",
+    "UWMC": "UWM Holdings",
+    "PFSI": "PennyMac Financial Services",
+    # EV / Clean Energy
+    "CHPT": "ChargePoint",
+    "BLNK": "Blink Charging",
+    "STEM": "Stem Inc",
+    # Industrials / Defense
+    "JOBY": "Joby Aviation",
+    "ACHR": "Archer Aviation",
+    "LILM": "Lilium",
+    # Tech / Software
+    "AI": "C3.ai",
+    "BBAI": "BigBear.ai",
+    "CLOV": "Clover Health",
+    "PRCT": "Procept BioRobotics",
+    # Banks / Regional
+    "HBAN": "Huntington Bancshares",
+    "RF": "Regions Financial",
+    "FITB": "Fifth Third Bancorp",
+    "ZION": "Zions Bancorporation",
+    # Consumer
+    "NKLA": "Nikola Corporation",
+    "LAZR": "Luminar Technologies",
 }
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
@@ -285,7 +332,7 @@ PRICE_BUFFER_MAX = 175.0                 # buffer zone upper bound (= SCANNER_MA
 # only pick it if the setup qualifies as PREMIUM (R:R >= 3.0 AND target_move >= 10%).
 SCANNER_RSI_MIN = 40                     # not deeply oversold
 SCANNER_RSI_MAX = 75                     # not extended / overbought
-SCANNER_TOP_N = 10                       # candidates passed to analyst
+SCANNER_TOP_N = 12                       # candidates passed to analyst
 
 # ── Relative strength ──────────────────────────────────────────────────────────
 # Stocks are scored on how much they OUTPERFORM SPY over RS_PERIOD trading days.
