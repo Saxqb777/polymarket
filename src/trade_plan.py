@@ -87,6 +87,67 @@ def suggest_position(
     }
 
 
+def conviction_tier(quality_tier: str, confidence: str) -> str:
+    """
+    Map the analyst's quality_tier + confidence to a conviction bucket that
+    decides how big to size. PREMIUM + HIGH is the only path to full size.
+    """
+    qt = (quality_tier or "BELOW_BAR").upper()
+    conf = (confidence or "MEDIUM").upper()
+    if qt == "PREMIUM" and conf == "HIGH":
+        return "A_PLUS"
+    if qt == "PREMIUM" or (qt == "STANDARD" and conf == "HIGH"):
+        return "PREMIUM"
+    if qt == "STANDARD":
+        return "STANDARD"
+    if qt == "ACCEPTABLE":
+        return "ACCEPTABLE"
+    return "BELOW_BAR"
+
+
+def conviction_position(
+    entry: float,
+    stop: float,
+    quality_tier: str,
+    confidence: str,
+    capital: float = config.ACCOUNT_CAPITAL,
+    risk_pct: float = config.RISK_PER_TRADE_PCT,
+) -> dict:
+    """
+    Conviction-based sizing for display. The position cap scales with how good
+    the setup is (CONVICTION_SIZING ladder), but the final size is the TIGHTER
+    of that cap and the per-trade risk rule — so risk per trade stays bounded
+    no matter how big the conviction bucket allows.
+    """
+    bucket = conviction_tier(quality_tier, confidence)
+    cap_pct = config.CONVICTION_SIZING.get(bucket, 0.05)
+
+    risk_per_share = abs(entry - stop)
+    risk_amount = round(capital * risk_pct, 2)
+    conviction_cap = round(capital * cap_pct, 2)
+
+    if risk_per_share > 0 and entry > 0:
+        shares_by_risk = risk_amount / risk_per_share
+        shares_by_cap = conviction_cap / entry
+        suggested_shares = min(shares_by_risk, shares_by_cap)
+        binding = "risk rule (wide stop)" if shares_by_risk <= shares_by_cap else "conviction cap"
+    else:
+        suggested_shares = 0.0
+        binding = "n/a"
+
+    suggested_value = round(suggested_shares * entry, 2)
+    return {
+        "bucket": bucket,
+        "cap_pct": cap_pct,
+        "conviction_cap": conviction_cap,
+        "suggested_shares": round(suggested_shares, 4),
+        "suggested_value": suggested_value,
+        "position_pct": round((suggested_value / capital) * 100, 1) if capital else 0.0,
+        "risk_amount": min(risk_amount, round(suggested_shares * risk_per_share, 2)),
+        "binding_rule": binding,
+    }
+
+
 # ── Telegram MarkdownV2 escaping ──────────────────────────────────────────────
 
 _MD2_SPECIAL = r'\_*[]()~`>#+-=|{}.!'
@@ -152,10 +213,22 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
     stop_diff = stop - entry
     target_diff = target - entry
 
-    suggestion = suggest_position(entry, stop, capital)
+    quality_tier_raw = r.get("quality_tier", "BELOW_BAR")
+    suggestion = conviction_position(entry, stop, quality_tier_raw,
+                                     r.get("confidence", "MEDIUM"), capital)
     sug_shares = _esc(f"{suggestion['suggested_shares']:.4f}")
     sug_value = _esc(f"{suggestion['suggested_value']:.2f}")
     sug_risk = _esc(f"{suggestion['risk_amount']:.2f}")
+    sug_pct = _esc(f"{suggestion['position_pct']:.0f}%")
+    binding = _esc(suggestion["binding_rule"])
+    bucket_label = {
+        "A_PLUS": "🔥 A+ — GO BIG",
+        "PREMIUM": "💪 High conviction",
+        "STANDARD": "✅ Standard size",
+        "ACCEPTABLE": "🤏 Small starter",
+        "BELOW_BAR": "⚠️ Token size",
+    }.get(suggestion["bucket"], "Standard")
+    bucket_str = _esc(bucket_label)
 
     risks = r.get("key_risks") or []
     risk_lines = "\n".join(f"• {_esc(rk)}" for rk in risks) if risks else _esc("None identified")
@@ -200,9 +273,10 @@ def _format_trade(r: dict, date_str: str, mode_str: str, capital: float) -> str:
         f"⚖️  R:R           1:{_esc(str(rr))}\n"
         f"📊 Target move   {move_str}   Tier: {tier_str}\n"
         f"\n"
-        f"💰 *Suggested size* \\(1% risk rule\\)\n"
-        f"  ≈{sug_shares} shares \\(≈\\${sug_value}\\)\n"
-        f"  Max risk: ≈\\${sug_risk}\n"
+        f"💰 *Suggested size* — {bucket_str}\n"
+        f"  ≈{sug_shares} shares \\(≈\\${sug_value} · {sug_pct} of capital\\)\n"
+        f"  Max risk if stopped: ≈\\${sug_risk}\n"
+        f"  _Capped by: {binding}_\n"
         f"📌 _You set the actual size — stop and target are non\\-negotiable\\._\n"
         f"\n"
         f"⏱ Timeframe     {timeframe}\n"

@@ -5,10 +5,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Account ────────────────────────────────────────────────────────────────────
-ACCOUNT_CAPITAL = float(os.getenv("ACCOUNT_CAPITAL", 10000))
-RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", 0.01))
-MAX_POSITION_SIZE_PCT = float(os.getenv("MAX_POSITION_SIZE_PCT", 0.05))
+ACCOUNT_CAPITAL = float(os.getenv("ACCOUNT_CAPITAL", 650))
+RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", 0.02))
+MAX_POSITION_SIZE_PCT = float(os.getenv("MAX_POSITION_SIZE_PCT", 0.20))
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
+
+# ── Conviction-based position sizing ───────────────────────────────────────────
+# "Buy big when the setup earns it." The size ceiling scales with the analyst's
+# own quality_tier + confidence rating. The actual share count is still the
+# TIGHTER of (a) this conviction cap and (b) the per-trade risk rule above, so a
+# wide stop will shrink the position even on an A+ setup — risk stays controlled.
+# Percentages are of ACCOUNT_CAPITAL.
+CONVICTION_SIZING = {
+    "A_PLUS":     0.20,   # PREMIUM + HIGH confidence — full conviction, buy big
+    "PREMIUM":    0.14,   # PREMIUM (any confidence) or STANDARD + HIGH
+    "STANDARD":   0.09,   # STANDARD setup
+    "ACCEPTABLE": 0.05,   # ACCEPTABLE — small starter position
+    "BELOW_BAR":  0.03,   # below bar — token size only, bot doesn't recommend it
+}
+# Expected holding horizon (trading days). Drives the reachability check: a target
+# the stock realistically can't travel to within this window is a poor swing.
+HOLD_DAYS = int(os.getenv("HOLD_DAYS", 5))
 
 # ── Run cadence ────────────────────────────────────────────────────────────────
 # The bot now runs on a configurable cadence (Railway cron drives the real

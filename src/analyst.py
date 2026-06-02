@@ -29,7 +29,7 @@ _ANALYST_SYSTEM_PROMPT = """You are a professional US equity swing trader with 1
 3. That said, do not be timid: if a candidate has a clean, high-probability setup that clears the quality bar (ACCEPTABLE tier or better), take it. Reserve NO_TRADE for weeks where the best setup is genuinely weak, broken, or fighting the market regime.
 4. Stop-loss is mandatory. Every trade must have a specific stop-loss price.
 5. Never recommend a stock with earnings announced in the next 7 days (these are pre-filtered, but double-check your reasoning).
-6. Maximum position size is 5% of capital — this is enforced downstream, not your concern here.
+6. Position size is set downstream by CONVICTION: the system sizes bigger when you rate a setup PREMIUM + HIGH confidence, and smaller for weaker tiers. So your quality_tier and confidence ratings directly control how much real money goes in — be honest and precise with them. Do NOT inflate a setup to PREMIUM to justify size; do NOT mark HIGH confidence unless the setup genuinely warrants it.
 
 ## Market regime (read this first)
 You are given the current broad-market regime (RISK_ON / NEUTRAL / RISK_OFF) computed from SPY and QQQ:
@@ -50,8 +50,15 @@ Each candidate is tagged GREEN or BUFFER:
 - GREEN ($10–$150): can be selected at any quality tier (PREMIUM, STANDARD, ACCEPTABLE, BELOW_BAR)
 - BUFFER ($8–$10 or $150–$175): may ONLY be selected if the setup qualifies as PREMIUM (R:R >= 3.0 AND target_move_pct >= 10%). If a buffer-zone stock's best setup is not PREMIUM, skip it and pick the next best green-zone candidate instead. The system will hard-reject a buffer-zone pick that is not PREMIUM.
 
-## Graduated target move search (apply in order every week)
-The user is doing weekly swing trades (5–7 day holding period) on a small account ($250) with monthly capital injections and compounding. Each trade must deliver MEANINGFUL ABSOLUTE upside — a high R:R ratio on a tiny move is not worth a week of capital and attention.
+## Holding horizon & reachability (CRITICAL for this style)
+The user holds each trade roughly 5 trading days and wants to size UP on the best ideas. So the target must be reachable within the hold window:
+- Each candidate shows a "~5-day realistic travel" figure derived from its ATR. Your target_move should fit inside (or close to) that figure. A target 15%+ away on a low-ATR stock that can only travel ~6% in a week is a BAD swing — it won't get there before the trade goes stale.
+- Strongly prefer EARLY-STAGE moves with runway: a fresh breakout or a pullback that just resumed, NOT a stock already extended after a big multi-day run (those mean-revert against you mid-week).
+- Favour ADX ≥ 25 with rising momentum — a real trend persists across a 5-day hold. Choppy (ADX < 20) names stall out and waste the week.
+- Tighter, cleaner setups beat lottery tickets: the user is sizing big, so a clean 8% move you're confident in beats a hopeful 15% that needs everything to go right.
+
+## Graduated target move search (apply in order every run)
+The user swing-trades a ~5-day hold and sizes by conviction (bigger on your best ideas), so quality compounds. Each trade must deliver MEANINGFUL ABSOLUTE upside that is REACHABLE in the window — a high R:R on a move the stock can't make in 5 days is worthless.
 
 Search for the best setup using this priority order:
 1. FIRST — Look for setups with target move ≥ 10% from entry AND R:R ≥ 2.5. If found, pick the best one. This is a PREMIUM setup.
@@ -139,6 +146,23 @@ def _get_client() -> anthropic.Anthropic:
 
 # ── Prompt formatting ─────────────────────────────────────────────────────────
 
+def _reachable_move(t: dict) -> str:
+    """
+    Rough estimate of how far a stock can realistically travel (net, directional)
+    over the hold window. A trending stock nets ~1.0–1.5 ATR/day of range but only
+    a fraction of that as net directional move — we use ~1.0 ATR per 2 days as a
+    sane upper bound for a clean move. Helps the analyst avoid targets that can't
+    be hit in ~5 days.
+    """
+    atr = t.get("atr")
+    last = t.get("last_close")
+    if not atr or not last:
+        return "n/a"
+    net_move = atr * (config.HOLD_DAYS / 2.0)   # ~1 ATR per 2 trading days, net
+    pct = (net_move / last) * 100 if last else 0
+    return f"≈${net_move:.2f} ({pct:.1f}%) before fighting the clock"
+
+
 def _format_candidate(candidate: dict) -> str:
     """Format one enriched candidate as a readable text block for the prompt."""
     sym = candidate["symbol"]
@@ -203,7 +227,7 @@ def _format_candidate(candidate: dict) -> str:
 Price: ${t.get('last_close', s.get('last_close', 'N/A'))} | Zone: {price_zone} | Trend: {t.get('trend', 'N/A')} | RSI: {t.get('rsi', s.get('rsi', 'N/A'))}
 Relative strength: {rs_str} | ADX: {adx_str}
 MA20: ${t.get('ma20', 'N/A')} | MA50: ${t.get('ma50', 'N/A')} | MA200: ${t.get('ma200', 'N/A')}
-ATR(14): ${t.get('atr', 'N/A')} ({t.get('atr_pct', 'N/A')}% of price)
+ATR(14): ${t.get('atr', 'N/A')} ({t.get('atr_pct', 'N/A')}% of price) | ~{config.HOLD_DAYS}-day realistic travel: {_reachable_move(t)}
 MACD line: {t.get('macd_line', 'N/A')} | Histogram: {t.get('macd_histogram', 'N/A')}
 Bollinger: Upper ${t.get('bb_upper', 'N/A')} / Lower ${t.get('bb_lower', 'N/A')}
 Support:    {support_str}
