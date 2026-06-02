@@ -348,7 +348,8 @@ PRICE_BUFFER_MAX = 175.0                 # buffer zone upper bound (= SCANNER_MA
 # Buffer zone ($8-$10 or $150-$175): candidate passes hard filter but analyst may
 # only pick it if the setup qualifies as PREMIUM (R:R >= 3.0 AND target_move >= 10%).
 SCANNER_RSI_MIN = 40                     # not deeply oversold
-SCANNER_RSI_MAX = 75                     # not extended / overbought
+SCANNER_RSI_MAX = 82                     # allow strong-momentum breakouts through;
+                                         # the analyst judges early-move vs exhausted
 SCANNER_TOP_N = 12                       # candidates passed to analyst
 
 # ── Relative strength ──────────────────────────────────────────────────────────
