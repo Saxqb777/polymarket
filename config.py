@@ -132,6 +132,21 @@ WATCHLIST = [
     "JOBY", "ACHR",
     # Consumer turnaround / momentum
     "OPEN", "LAZR",
+    # ── 2026-06 moonshot batch: cheap, volatile, high-upside momentum names ────
+    # Quantum / AI compute
+    "SOUN", "TEM", "SMCI", "CRDO", "INOD",
+    # Nuclear / uranium / power
+    "CCJ", "UEC", "LEU", "NNE", "VST", "AMSC",
+    # Space / drones / robotics
+    "LUNR", "RCAT", "SERV", "GSAT",
+    # Biotech movers
+    "RXRX", "VKTX", "NTLA", "DNA",
+    # EV / battery / clean energy
+    "QS", "ENVX", "RUN",
+    # Crypto-adjacent / momentum / meme
+    "HUT", "RUM", "DJT",
+    # Semis (cheap momentum)
+    "AEHR",
 ]
 
 # ── Company name mapping (for news queries) ────────────────────────────────────
@@ -335,6 +350,33 @@ SYMBOL_TO_COMPANY = {
     # Consumer
     "NKLA": "Nikola Corporation",
     "LAZR": "Luminar Technologies",
+    # ── 2026-06 moonshot batch ────────────────────────────────────────────────
+    "SOUN": "SoundHound AI",
+    "TEM": "Tempus AI",
+    "SMCI": "Super Micro Computer",
+    "CRDO": "Credo Technology",
+    "INOD": "Innodata",
+    "CCJ": "Cameco",
+    "UEC": "Uranium Energy",
+    "LEU": "Centrus Energy",
+    "NNE": "Nano Nuclear Energy",
+    "VST": "Vistra",
+    "AMSC": "American Superconductor",
+    "LUNR": "Intuitive Machines",
+    "RCAT": "Red Cat Holdings",
+    "SERV": "Serve Robotics",
+    "GSAT": "Globalstar",
+    "RXRX": "Recursion Pharmaceuticals",
+    "VKTX": "Viking Therapeutics",
+    "NTLA": "Intellia Therapeutics",
+    "DNA": "Ginkgo Bioworks",
+    "QS": "QuantumScape",
+    "ENVX": "Enovix",
+    "RUN": "Sunrun",
+    "HUT": "Hut 8",
+    "RUM": "Rumble",
+    "DJT": "Trump Media and Technology Group",
+    "AEHR": "Aehr Test Systems",
 }
 
 # ── Scanner thresholds ─────────────────────────────────────────────────────────
